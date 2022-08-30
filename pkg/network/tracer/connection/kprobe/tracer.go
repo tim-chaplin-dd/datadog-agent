@@ -84,10 +84,10 @@ func New(config *config.Config, constants []manager.ConstantEditor) (connection.
 		MapSpecEditors: map[string]manager.MapSpecEditor{
 			string(probes.ConnMap):            {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			string(probes.TcpStatsMap):        {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
-			string(probes.PortBindingsMap):    {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
-			string(probes.UdpPortBindingsMap): {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
-			string(probes.SockByPidFDMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
-			string(probes.PidFDBySockMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			// string(probes.PortBindingsMap):    {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			// string(probes.UdpPortBindingsMap): {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			// string(probes.SockByPidFDMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			// string(probes.PidFDBySockMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 		},
 		ConstantEditors: constants,
 	}
@@ -164,15 +164,15 @@ func New(config *config.Config, constants []manager.ConstantEditor) (connection.
 		return nil, fmt.Errorf("failed to init ebpf manager: %v", err)
 	}
 
-	closeConsumer, err := newTCPCloseConsumer(m, perfHandlerTCP)
-	if err != nil {
-		return nil, fmt.Errorf("could not create tcpCloseConsumer: %s", err)
-	}
+	// closeConsumer, err := newTCPCloseConsumer(m, perfHandlerTCP)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not create tcpCloseConsumer: %s", err)
+	// }
 
 	tr := &kprobeTracer{
 		m:             m,
 		config:        config,
-		closeConsumer: closeConsumer,
+		closeConsumer: nil,
 		pidCollisions: atomic.NewInt64(0),
 		removeTuple:   &netebpf.ConnTuple{},
 		telemetry:     newTelemetry(),
@@ -200,26 +200,26 @@ func (t *kprobeTracer) Start(callback func([]network.ConnectionStats)) (err erro
 		}
 	}()
 
-	err = initializePortBindingMaps(t.config, t.m)
-	if err != nil {
-		return fmt.Errorf("error initializing port binding maps: %s", err)
-	}
+	// err = initializePortBindingMaps(t.config, t.m)
+	// if err != nil {
+	// 	return fmt.Errorf("error initializing port binding maps: %s", err)
+	// }
 
 	if err := t.m.Start(); err != nil {
 		return fmt.Errorf("could not start ebpf manager: %s", err)
 	}
 
-	t.closeConsumer.Start(callback)
+	// t.closeConsumer.Start(callback)
 	return nil
 }
 
 func (t *kprobeTracer) FlushPending() {
-	t.closeConsumer.FlushPending()
+	// t.closeConsumer.FlushPending()
 }
 
 func (t *kprobeTracer) Stop() {
 	_ = t.m.Stop(manager.CleanAll)
-	t.closeConsumer.Stop()
+	// t.closeConsumer.Stop()
 }
 
 func (t *kprobeTracer) GetMap(name string) *ebpf.Map {
@@ -367,12 +367,12 @@ func (t *kprobeTracer) GetTelemetry() map[string]int64 {
 		log.Tracef("error retrieving the telemetry struct: %s", err)
 	}
 
-	closeStats := t.closeConsumer.GetStats()
+	// closeStats := t.closeConsumer.GetStats()
 	pidCollisions := t.pidCollisions.Load()
 
 	stats := map[string]int64{
-		"closed_conn_polling_lost":     closeStats[perfLostStat],
-		"closed_conn_polling_received": closeStats[perfReceivedStat],
+		// "closed_conn_polling_lost":     closeStats[perfLostStat],
+		// "closed_conn_polling_received": closeStats[perfReceivedStat],
 		"pid_collisions":               pidCollisions,
 
 		"tcp_sent_miscounts":         int64(telemetry.Tcp_sent_miscounts),

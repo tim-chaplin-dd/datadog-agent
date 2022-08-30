@@ -151,6 +151,9 @@ const (
 	TagsMap               BPFMapName = "conn_tags"
 	TcpSendMsgArgsMap     BPFMapName = "tcp_sendmsg_args"
 	IpMakeSkbArgsMap      BPFMapName = "ip_make_skb_args"
+
+	TcpCloseEventMap   BPFMapName = "tcp_close_event"
+	TcpCloseBatchMap   BPFMapName = "tcp_close_batch"
 )
 
 // SectionName returns the SectionName for the given BPF map
