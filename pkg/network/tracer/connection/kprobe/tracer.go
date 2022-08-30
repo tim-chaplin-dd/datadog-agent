@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -92,9 +93,21 @@ func New(config *config.Config, constants []manager.ConstantEditor) (connection.
 	}
 
 	runtimeTracer := false
+	coreTracer := false
 	var buf bytecode.AssetReader
 	var err error
-	if config.EnableRuntimeCompiler {
+
+	if config.EnableCORE {
+		buf, err = netebpf.ReadBPFModule(filepath.Join(config.BPFDir, "/co-re"), config.BPFDebug)
+		if err != nil {
+			log.Warnf("error loading CO-RE bpf module: %s", err)
+		} else {
+			coreTracer = true
+			defer buf.Close()
+		}
+	}
+
+	if buf == nil && config.EnableRuntimeCompiler {
 		buf, err = getRuntimeCompiledTracer(config)
 		if err != nil {
 			if !config.AllowPrecompiledFallback {
@@ -116,7 +129,7 @@ func New(config *config.Config, constants []manager.ConstantEditor) (connection.
 	}
 
 	// Use the config to determine what kernel probes should be enabled
-	enabledProbes, err := enabledProbes(config, runtimeTracer)
+	enabledProbes, err := enabledProbes(config, runtimeTracer, coreTracer)
 	if err != nil {
 		return nil, fmt.Errorf("invalid probe configuration: %v", err)
 	}

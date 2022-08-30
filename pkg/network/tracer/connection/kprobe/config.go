@@ -30,7 +30,7 @@ func enableProbe(enabled map[probes.ProbeName]string, name probes.ProbeName) {
 
 // enabledProbes returns a map of probes that are enabled per config settings.
 // This map does not include the probes used exclusively in the offset guessing process.
-func enabledProbes(c *config.Config, runtimeTracer bool) (map[probes.ProbeName]string, error) {
+func enabledProbes(c *config.Config, runtimeTracer, _ bool) (map[probes.ProbeName]string, error) { // TODO add coreTracer
 	enabled := make(map[probes.ProbeName]string, 0)
 	ksymPath := filepath.Join(c.ProcRoot, "kallsyms")
 
