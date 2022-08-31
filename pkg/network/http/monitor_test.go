@@ -17,6 +17,7 @@ import (
 	nethttp "net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -284,32 +285,71 @@ func TestUnknownMethodRegression(t *testing.T) {
 	})
 	defer srvDoneFn()
 
+	/* Save and recover TCP timestamp option */
+	oldTCPTS, err := exec.Command("cat", "/proc/sys/net/ipv4/tcp_timestamps").CombinedOutput()
+	require.NoError(t, err)
+	defer func() {
+		_, err := exec.Command("bash", "-c", fmt.Sprintf("echo %c > /proc/sys/net/ipv4/tcp_timestamps", oldTCPTS[0])).CombinedOutput()
+		require.NoError(t, err)
+	}()
+
 	monitor, err := NewMonitor(config.New(), nil, nil)
 	require.NoError(t, err)
 	err = monitor.Start()
 	require.NoError(t, err)
 	defer monitor.Stop()
 
-	requestFn := requestGenerator(t, targetAddr, emptyBody)
-	for i := 0; i < 100; i++ {
-		requestFn()
+	for _, TCPTimestamp := range []struct {
+		name  string
+		value int
+	}{
+		{name: "without TCP timestamp option", value: 0},
+		{name: "with TCP timestamp option", value: 1},
+	} {
+
+		t.Run(TCPTimestamp.name, func(t *testing.T) {
+			_, err := exec.Command("bash", "-c", fmt.Sprintf("echo %d > /proc/sys/net/ipv4/tcp_timestamps", TCPTimestamp.value)).CombinedOutput()
+			require.NoError(t, err)
+
+			requestFn := requestGenerator(t, targetAddr, emptyBody)
+			for i := 0; i < 100; i++ {
+				requestFn()
+			}
+
+			time.Sleep(2 * time.Second)
+			stats := monitor.GetHTTPStats()
+
+			for key := range stats {
+				if key.Method == MethodUnknown {
+					t.Error("detected HTTP request with method unknown")
+				}
+			}
+
+			telemetry := monitor.GetStats()
+			require.NotEmpty(t, telemetry)
+			v, ok := telemetry["dropped"]
+			require.True(t, ok)
+			require.Equal(t, int64(0), v)
+			v, ok = telemetry["misses"]
+			require.Equal(t, int64(0), v)
+			v, ok = telemetry["malformed"]
+			require.True(t, ok)
+			require.Equal(t, int64(0), v)
+			// requestGenerator() doesn't query 100 responses
+			v, ok = telemetry["hits1_xx"]
+			require.True(t, ok)
+			require.Equal(t, int64(0), v)
+
+			requestsSum := int64(0)
+			for _, h := range []string{"hits1_xx", "hits2_xx", "hits3_xx", "hits4_xx", "hits5_xx"} {
+				v, ok = telemetry[h]
+				require.True(t, ok)
+				requestsSum += v.(int64)
+			}
+			require.Equal(t, int64(100), requestsSum)
+		})
 	}
 
-	time.Sleep(10 * time.Millisecond)
-	stats := monitor.GetHTTPStats()
-
-	for key := range stats {
-		if key.Method == MethodUnknown {
-			t.Error("detected HTTP request with method unknown")
-		}
-	}
-
-	telemetry := monitor.GetStats()
-	require.NotEmpty(t, telemetry)
-	_, ok := telemetry["dropped"]
-	require.True(t, ok)
-	_, ok = telemetry["misses"]
-	require.True(t, ok)
 }
 
 func TestRSTPacketRegression(t *testing.T) {
