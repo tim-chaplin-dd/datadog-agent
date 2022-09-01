@@ -277,8 +277,8 @@ func TestUnknownMethodRegression(t *testing.T) {
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
 	netlink.SetupDNAT(t)
 
-	targetAddr := "2.2.2.2:8080"
-	serverAddr := "1.1.1.1:8080"
+	targetAddr := "2.2.2.2:8888"
+	serverAddr := "1.1.1.1:8888"
 	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
 		EnableTLS:        false,
 		EnableKeepAlives: true,
@@ -346,7 +346,7 @@ func TestUnknownMethodRegression(t *testing.T) {
 				require.True(t, ok)
 				requestsSum += v.(int64)
 			}
-			require.True(t, requestsSum >= int64(100))
+			require.Equal(t, int64(100), requestsSum)
 		})
 	}
 
