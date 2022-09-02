@@ -36,6 +36,9 @@ type Config struct {
 	// EnableCORE enables the use of CO-RE to load eBPF programs
 	EnableCORE bool
 
+	// BTFPath is the path to BTF data for the current kernel
+	BTFPath string
+
 	// EnableRuntimeCompiler enables the use of the embedded compiler to build eBPF programs on-host
 	EnableRuntimeCompiler bool
 
@@ -81,6 +84,8 @@ func NewConfig() *Config {
 		ProcRoot:                 util.GetProcRoot(),
 
 		EnableCORE:                 cfg.GetBool(key(spNS, "enable_co_re")),
+		BTFPath:                    cfg.GetString(key(spNS, "btf_path")),
+		
 		EnableRuntimeCompiler:      cfg.GetBool(key(spNS, "enable_runtime_compiler")),
 		RuntimeCompilerOutputDir:   cfg.GetString(key(spNS, "runtime_compiler_output_dir")),
 		EnableKernelHeaderDownload: cfg.GetBool(key(spNS, "enable_kernel_header_download")),
