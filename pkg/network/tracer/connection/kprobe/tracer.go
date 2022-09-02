@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 	"go.uber.org/atomic"
 	"golang.org/x/sys/unix"
 
@@ -69,7 +70,64 @@ func newTelemetry() telemetry {
 	}
 }
 
-func New(config *config.Config, constants []manager.ConstantEditor) (connection.Tracer, error) {
+func New(config *config.Config, constantEditors []manager.ConstantEditor) (connection.Tracer, error) {
+	runtimeTracer := false
+	coreTracer := false
+
+	var btfData *btf.Spec = nil
+	var buf bytecode.AssetReader
+	var err error
+
+	if config.EnableCORE {
+		btfData = getBTF(config.BTFPath, filepath.Join(config.BPFDir, "/co-re/btf"))
+		if btfData != nil {
+			buf, err = netebpf.ReadBPFModule(filepath.Join(config.BPFDir, "/co-re"), config.BPFDebug)
+			if err != nil {
+				log.Warnf("error reading CO-RE bpf module: %s", err)
+			} else {
+				log.Debugf("loaded CO-RE version of network-tracer module")
+				coreTracer = true
+				defer buf.Close()
+
+				// remove offset guessing-provided offsets to test CO-RE is working as expected
+				constantEditors = []manager.ConstantEditor{}
+
+				/*
+				Note: there is a big problem with this implementation, which is that even if we find a BTF  
+				file and successfully load the co-re BPF module here, the ebpf manager could still fail to 
+				be initialized below (ie if the BTF is invalid). If that happens, then we won't properly fall 
+				back to offset guessing/runtime compilation.
+
+				For the purposes of this POC, this is acceptable, however this won't work in production.
+				*/
+			}
+		}
+	}
+
+	if buf == nil && config.EnableRuntimeCompiler {
+		buf, err = getRuntimeCompiledTracer(config)
+		if err != nil {
+			if !config.AllowPrecompiledFallback {
+				return nil, fmt.Errorf("error compiling network tracer: %s", err)
+			}
+			log.Warnf("error compiling network tracer, falling back to pre-compiled: %s", err)
+		} else {
+			log.Debugf("loaded runtime compiled version of network tracer module")
+			runtimeTracer = true
+			defer func() { _ = buf.Close() }()
+		}
+	}
+
+	if buf == nil {
+		buf, err = netebpf.ReadBPFModule(config.BPFDir, config.BPFDebug)
+		if err != nil {
+			return nil, fmt.Errorf("could not read bpf module: %s", err)
+		}
+		defer buf.Close()
+
+		log.Debugf("loaded pre-compiled version of network tracer module")
+	}
+
 	mgrOptions := manager.Options{
 		// Extend RLIMIT_MEMLOCK (8) size
 		// On some systems, the default for RLIMIT_MEMLOCK may be as low as 64 bytes.
@@ -89,43 +147,12 @@ func New(config *config.Config, constants []manager.ConstantEditor) (connection.
 			// string(probes.SockByPidFDMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			// string(probes.PidFDBySockMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 		},
-		ConstantEditors: constants,
-	}
-
-	runtimeTracer := false
-	coreTracer := false
-	var buf bytecode.AssetReader
-	var err error
-
-	if config.EnableCORE {
-		buf, err = netebpf.ReadBPFModule(filepath.Join(config.BPFDir, "/co-re"), config.BPFDebug)
-		if err != nil {
-			log.Warnf("error loading CO-RE bpf module: %s", err)
-		} else {
-			coreTracer = true
-			defer buf.Close()
-		}
-	}
-
-	if buf == nil && config.EnableRuntimeCompiler {
-		buf, err = getRuntimeCompiledTracer(config)
-		if err != nil {
-			if !config.AllowPrecompiledFallback {
-				return nil, fmt.Errorf("error compiling network tracer: %s", err)
-			}
-			log.Warnf("error compiling network tracer, falling back to pre-compiled: %s", err)
-		} else {
-			runtimeTracer = true
-			defer func() { _ = buf.Close() }()
-		}
-	}
-
-	if buf == nil {
-		buf, err = netebpf.ReadBPFModule(config.BPFDir, config.BPFDebug)
-		if err != nil {
-			return nil, fmt.Errorf("could not read bpf module: %s", err)
-		}
-		defer buf.Close()
+		ConstantEditors: constantEditors,
+		VerifierOptions: ebpf.CollectionOptions{
+			Programs: ebpf.ProgramOptions{
+				KernelTypes: btfData,
+			},
+		},
 	}
 
 	// Use the config to determine what kernel probes should be enabled
