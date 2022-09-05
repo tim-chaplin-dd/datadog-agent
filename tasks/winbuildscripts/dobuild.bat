@@ -37,9 +37,9 @@ if "%TARGET_ARCH%" == "x86" (
     REM Use 64-bit toolchain to build gems
     Powershell -C "ridk enable; cd omnibus; bundle install"
 )
-
-if not exist \dev\go\src\github.com\DataDog\datadog-agent exit /b 100
-cd \dev\go\src\github.com\DataDog\datadog-agent || exit /b 101
+set REPO_ROOT=%~p0\..\..
+pushd .
+cd %REPO_ROOT% || exit /b 101
 
 
 pip3 install -r requirements.txt || exit /b 102
@@ -48,3 +48,4 @@ inv -e deps || exit /b 103
 
 @echo "inv -e %OMNIBUS_BUILD% %OMNIBUS_ARGS% --skip-deps --major-version %MAJOR_VERSION% --release-version %RELEASE_VERSION%"
 inv -e %OMNIBUS_BUILD% %OMNIBUS_ARGS% --skip-deps --major-version %MAJOR_VERSION% --release-version %RELEASE_VERSION% || exit /b 104
+popd
