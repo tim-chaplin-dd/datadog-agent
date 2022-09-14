@@ -10,6 +10,10 @@
             }
         },
         "ec2": {
+            "x86_64": {
+                "centos-79": "ami-00e87074e52e6c9f9",
+                "rhel-81": "ami-07b1305cd78401892"
+            },
             "arm64": {
                 "centos-78": "ami-0271a6516c34c6be9",
                 "rhel-83": "ami-0698b90665a2ddcf1"
@@ -33,6 +37,10 @@
             }
         },
         "ec2": {
+            "x86_64": {
+                "debian-10": "ami-0c7ed0ec32865e4db",
+                "debian-11": "ami-0c56357cb414f9599"
+            },
             "arm64": {
                 "debian-10": "ami-018ce69d4b9c9e3ec",
                 "debian-11": "ami-0d53a3ba77632d713"
@@ -68,6 +76,12 @@
             }
         },
         "ec2": {
+            "x86_64": {
+                "ubuntu-16-04": "ami-0b0ea68c435eb488d",
+                "ubuntu-18-04": "ami-0ee23bfc74a881de5",
+                "ubuntu-20-04": "ami-079ca844e323047c2",
+                "ubuntu-22-04": "ami-08c40ec9ead489470"
+            },
             "arm64": {
                 "ubuntu-18-04": "ami-02ed82f3a38303e6f",
                 "ubuntu-20-04": "ami-0b75998a97c952252",

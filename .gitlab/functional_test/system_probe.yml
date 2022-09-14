@@ -28,13 +28,13 @@
 kitchen_test_system_probe_linux_x64:
   extends:
     - .kitchen_test_system_probe
-    - .kitchen_azure_x64
-    - .kitchen_azure_location_north_central_us
+    - .kitchen_ec2_location_us_east_1
+    - .kitchen_ec2
   needs: [ "tests_ebpf_x64", "generate_minimized_btfs_x64" ]
   variables:
     ARCH: amd64
     KITCHEN_ARCH: x86_64
-    KITCHEN_IMAGE_SIZE: Standard_D2_v2
+    KITCHEN_IMAGE_SIZE: "t3.xlarge"
   before_script:
     - !reference [.retrieve_minimized_btfs]
     - cd $DD_AGENT_TESTING_DIR
@@ -42,11 +42,11 @@ kitchen_test_system_probe_linux_x64:
   parallel:
     matrix:
       - KITCHEN_PLATFORM: "ubuntu"
-        KITCHEN_OSVERS: "ubuntu-16-04-4.4,ubuntu-18-04,ubuntu-20-04,ubuntu-22-04"
+        KITCHEN_OSVERS: "ubuntu-16-04,ubuntu-18-04,ubuntu-20-04,ubuntu-22-04"
       - KITCHEN_PLATFORM: "debian"
         KITCHEN_OSVERS: "debian-10,debian-11"
       - KITCHEN_PLATFORM: "centos"
-        KITCHEN_OSVERS: "centos-76,rhel-81"
+        KITCHEN_OSVERS: "centos-79,rhel-81"
 
 
 kitchen_test_system_probe_linux_x64_ec2:
