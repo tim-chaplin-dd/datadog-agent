@@ -22,6 +22,7 @@ typedef enum
 {
     HTTP_PACKET_UNKNOWN,
     HTTP_REQUEST,
+    HTTP2_REQUEST,
     HTTP_RESPONSE
 } http_packet_t;
 
