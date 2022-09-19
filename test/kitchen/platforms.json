@@ -12,11 +12,11 @@
         "ec2": {
             "x86_64": {
                 "centos-79": "ami-00e87074e52e6c9f9",
-                "rhel-81": "ami-07b1305cd78401892"
+                "rhel-86": "ami-06640050dc3f556bb"
             },
             "arm64": {
                 "centos-78": "ami-0271a6516c34c6be9",
-                "rhel-83": "ami-0698b90665a2ddcf1"
+                "rhel-86": "ami-0238411fb452f8275"
             }
         },
         "vagrant": {

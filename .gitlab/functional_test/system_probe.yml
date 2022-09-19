@@ -46,7 +46,7 @@ kitchen_test_system_probe_linux_x64:
       - KITCHEN_PLATFORM: "debian"
         KITCHEN_OSVERS: "debian-10,debian-11"
       - KITCHEN_PLATFORM: "centos"
-        KITCHEN_OSVERS: "centos-79,rhel-81"
+        KITCHEN_OSVERS: "centos-79,rhel-86"
 
 
 kitchen_test_system_probe_linux_x64_ec2:
@@ -90,7 +90,7 @@ kitchen_test_system_probe_linux_arm64:
       - KITCHEN_PLATFORM: "debian"
         KITCHEN_OSVERS: "debian-10,debian-11"
       - KITCHEN_PLATFORM: "centos"
-        KITCHEN_OSVERS: "centos-78,rhel-83"
+        KITCHEN_OSVERS: "centos-78,rhel-86"
       - KITCHEN_PLATFORM: "amazonlinux"
         KITCHEN_OSVERS: "amazonlinux2-4-14,amazonlinux2-5-10,amazonlinux2022-5-15"
 
