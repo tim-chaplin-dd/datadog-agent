@@ -331,6 +331,7 @@ func TestUnknownMethodRegression(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, int64(0), v)
 			v, ok = telemetry["misses"]
+			require.True(t, ok)
 			require.Equal(t, int64(0), v)
 			v, ok = telemetry["malformed"]
 			require.True(t, ok)
