@@ -410,8 +410,13 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
+require github.com/lorenzosaino/go-sysctl v0.3.1
+
 require (
+	golang.org/x/exp/typeparams v0.0.0-20220613132600-b0d781184e0d // indirect
+	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
+	honnef.co/go/tools v0.3.2 // indirect
 	k8s.io/apiextensions-apiserver v0.23.5 // indirect
 )
 

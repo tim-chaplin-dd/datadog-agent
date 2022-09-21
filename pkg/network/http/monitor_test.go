@@ -17,7 +17,6 @@ import (
 	nethttp "net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -277,28 +276,6 @@ func TestUnknownMethodRegression(t *testing.T) {
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
 	netlink.SetupDNAT(t)
 
-	targetAddr := "2.2.2.2:8888"
-	serverAddr := "1.1.1.1:8888"
-	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
-		EnableTLS:        false,
-		EnableKeepAlives: true,
-	})
-	defer srvDoneFn()
-
-	/* Save and recover TCP timestamp option */
-	oldTCPTS, err := exec.Command("cat", "/proc/sys/net/ipv4/tcp_timestamps").CombinedOutput()
-	require.NoError(t, err)
-	defer func() {
-		_, err := exec.Command("bash", "-c", fmt.Sprintf("echo %c > /proc/sys/net/ipv4/tcp_timestamps", oldTCPTS[0])).CombinedOutput()
-		require.NoError(t, err)
-	}()
-
-	monitor, err := NewMonitor(config.New(), nil, nil)
-	require.NoError(t, err)
-	err = monitor.Start()
-	require.NoError(t, err)
-	defer monitor.Stop()
-
 	for _, TCPTimestamp := range []struct {
 		name  string
 		value int
@@ -308,8 +285,20 @@ func TestUnknownMethodRegression(t *testing.T) {
 	} {
 
 		t.Run(TCPTimestamp.name, func(t *testing.T) {
-			_, err := exec.Command("bash", "-c", fmt.Sprintf("echo %d > /proc/sys/net/ipv4/tcp_timestamps", TCPTimestamp.value)).CombinedOutput()
+			targetAddr := "2.2.2.2:8888"
+			serverAddr := "1.1.1.1:8888"
+			srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
+				EnableTLS:          false,
+				EnableKeepAlives:   true,
+				EnableTCPTimestamp: true,
+			})
+			defer srvDoneFn()
+
+			monitor, err := NewMonitor(config.New(), nil, nil)
 			require.NoError(t, err)
+			err = monitor.Start()
+			require.NoError(t, err)
+			defer monitor.Stop()
 
 			requestFn := requestGenerator(t, targetAddr, emptyBody)
 			for i := 0; i < 100; i++ {
@@ -318,14 +307,18 @@ func TestUnknownMethodRegression(t *testing.T) {
 
 			time.Sleep(2 * time.Second)
 			stats := monitor.GetHTTPStats()
+			telemetry := monitor.GetStats()
 
+			nonDstPortRequests := int64(0)
 			for key := range stats {
+				if key.DstPort != 8888 {
+					nonDstPortRequests++
+				}
 				if key.Method == MethodUnknown {
 					t.Error("detected HTTP request with method unknown")
 				}
 			}
 
-			telemetry := monitor.GetStats()
 			require.NotEmpty(t, telemetry)
 			v, ok := telemetry["dropped"]
 			require.True(t, ok)
@@ -341,7 +334,7 @@ func TestUnknownMethodRegression(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, int64(0), v)
 
-			requestsSum := int64(0)
+			requestsSum := -nonDstPortRequests
 			for _, h := range []string{"hits1_xx", "hits2_xx", "hits3_xx", "hits4_xx", "hits5_xx"} {
 				v, ok = telemetry[h]
 				require.True(t, ok)
