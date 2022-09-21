@@ -258,16 +258,28 @@ func TestHTTPMonitorIntegrationWithNAT(t *testing.T) {
 
 	targetAddr := "2.2.2.2:8080"
 	serverAddr := "1.1.1.1:8080"
-	t.Run("with keep-alives", func(t *testing.T) {
-		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
-			EnableKeepAlives: true,
+	for _, TCPTimestamp := range []struct {
+		name  string
+		value bool
+	}{
+		{name: "without TCP timestamp option", value: false},
+		{name: "with TCP timestamp option", value: true},
+	} {
+		t.Run(TCPTimestamp.name, func(t *testing.T) {
+			t.Run("with keep-alives", func(t *testing.T) {
+				testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+					EnableKeepAlives:   true,
+					EnableTCPTimestamp: TCPTimestamp.value,
+				})
+			})
+			t.Run("without keep-alives", func(t *testing.T) {
+				testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+					EnableKeepAlives:   false,
+					EnableTCPTimestamp: TCPTimestamp.value,
+				})
+			})
 		})
-	})
-	t.Run("without keep-alives", func(t *testing.T) {
-		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
-			EnableKeepAlives: false,
-		})
-	})
+	}
 }
 
 func TestUnknownMethodRegression(t *testing.T) {
@@ -278,10 +290,10 @@ func TestUnknownMethodRegression(t *testing.T) {
 
 	for _, TCPTimestamp := range []struct {
 		name  string
-		value int
+		value bool
 	}{
-		{name: "without TCP timestamp option", value: 0},
-		{name: "with TCP timestamp option", value: 1},
+		{name: "without TCP timestamp option", value: false},
+		{name: "with TCP timestamp option", value: true},
 	} {
 
 		t.Run(TCPTimestamp.name, func(t *testing.T) {
@@ -290,7 +302,7 @@ func TestUnknownMethodRegression(t *testing.T) {
 			srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
 				EnableTLS:          false,
 				EnableKeepAlives:   true,
-				EnableTCPTimestamp: true,
+				EnableTCPTimestamp: TCPTimestamp.value,
 			})
 			defer srvDoneFn()
 
