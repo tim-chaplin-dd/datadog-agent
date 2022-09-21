@@ -285,8 +285,8 @@ func TestUnknownMethodRegression(t *testing.T) {
 	} {
 
 		t.Run(TCPTimestamp.name, func(t *testing.T) {
-			targetAddr := "2.2.2.2:8888"
-			serverAddr := "1.1.1.1:8888"
+			targetAddr := "2.2.2.2:8080"
+			serverAddr := "1.1.1.1:8080"
 			srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
 				EnableTLS:          false,
 				EnableKeepAlives:   true,
@@ -311,7 +311,7 @@ func TestUnknownMethodRegression(t *testing.T) {
 
 			nonDstPortRequests := int64(0)
 			for key := range stats {
-				if key.DstPort != 8888 {
+				if key.DstPort != 8080 {
 					nonDstPortRequests++
 				}
 				if key.Method == MethodUnknown {
@@ -334,13 +334,13 @@ func TestUnknownMethodRegression(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, int64(0), v)
 
-			requestsSum := -nonDstPortRequests
+			requestsSum := int64(0)
 			for _, h := range []string{"hits1_xx", "hits2_xx", "hits3_xx", "hits4_xx", "hits5_xx"} {
 				v, ok = telemetry[h]
 				require.True(t, ok)
 				requestsSum += v.(int64)
 			}
-			require.Equal(t, int64(100), requestsSum)
+			require.Equal(t, int64(100), requestsSum-nonDstPortRequests)
 		})
 	}
 
