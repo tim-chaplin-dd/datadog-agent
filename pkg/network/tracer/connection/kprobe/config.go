@@ -34,6 +34,7 @@ func enabledProbes(c *config.Config, runtimeTracer bool) (map[probes.ProbeName]s
 	enabled := make(map[probes.ProbeName]string, 0)
 	ksymPath := filepath.Join(c.ProcRoot, "kallsyms")
 
+	kv3190 := kernel.VersionCode(3, 19, 0)
 	kv410 := kernel.VersionCode(4, 1, 0)
 	kv470 := kernel.VersionCode(4, 7, 0)
 	kv, err := kernel.HostVersion()
@@ -42,7 +43,13 @@ func enabledProbes(c *config.Config, runtimeTracer bool) (map[probes.ProbeName]s
 	}
 
 	if c.CollectTCPConns {
-		enableProbe(enabled, selectVersionBasedProbe(runtimeTracer, kv, probes.TCPSendMsg, probes.TCPSendMsgPre410, kv410))
+		if kv < kv3190 {
+			enableProbe(enabled, probes.TCPSendMsgPre3190)
+		} else if kv < kv410 {
+			enableProbe(enabled, probes.TCPSendMsgPre410)
+		} else {
+			enableProbe(enabled, probes.TCPSendMsg)
+		}
 		enableProbe(enabled, probes.TCPSendMsgReturn)
 		enableProbe(enabled, probes.TCPCleanupRBuf)
 		enableProbe(enabled, probes.TCPClose)

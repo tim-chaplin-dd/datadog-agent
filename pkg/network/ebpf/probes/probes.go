@@ -30,6 +30,10 @@ const (
 	// TCPSendMsg traces the tcp_sendmsg() system call
 	TCPSendMsg ProbeName = "kprobe/tcp_sendmsg"
 
+	// TCPSendMsgPre3190 traces the tcp_sendmsg() system call on kernels prior to 3.19.0. This is created because
+	// we need to load a different kprobe implementation
+	TCPSendMsgPre3190 ProbeName = "kprobe/tcp_sendmsg/pre_3_19_0"
+
 	// TCPSendMsgPre410 traces the tcp_sendmsg() system call on kernels prior to 4.1.0. This is created because
 	// we need to load a different kprobe implementation
 	TCPSendMsgPre410 ProbeName = "kprobe/tcp_sendmsg/pre_4_1_0"

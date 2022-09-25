@@ -6,6 +6,7 @@
 #include "tracer-maps.h"
 #include "tracer-telemetry.h"
 #include "tcp_states.h"
+#include "protocol-classification-maps.h"
 
 #include "bpf_helpers.h"
 
@@ -97,6 +98,77 @@ static __always_inline void flush_conn_close_if_full(struct pt_regs *ctx) {
         batch_ptr->id++;
         bpf_perf_event_output(ctx, &conn_close_event, cpu, &batch_copy, sizeof(batch_copy));
     }
+}
+
+// Given msghdr pointer, extracts the buffer pointer from the struct and its size.
+static __always_inline void* get_msghdr_buffer_ptr(struct msghdr *ptr, size_t *buffer_size) {
+    struct msghdr local_msghdr = {0};
+    bpf_probe_read_kernel_with_telemetry(&local_msghdr, sizeof(local_msghdr), ptr);
+
+
+    if (local_msghdr.msg_iter.iov == NULL) {
+        return NULL;
+    }
+
+    struct iovec vec = {0};
+    bpf_probe_read_kernel_with_telemetry(&vec, sizeof(vec), (void*)local_msghdr.msg_iter.iov);
+    *buffer_size = vec.iov_len;
+    return vec.iov_base;
+}
+
+// Given a connection tuple, returns the cached protocol identified for the tuple.
+// In case that's the first time we see the given connection tuple, we returns an empty protocol.
+// The cache is being saved in connection_protocol map.
+static __always_inline protocol_t* get_cached_protocol(conn_tuple_t *conn_tuple) {
+    protocol_t *protocol = bpf_map_lookup_elem(&connection_protocol, conn_tuple);
+    if (protocol != NULL) {
+        return protocol;
+    }
+
+    protocol_t empty_protocol = {0};
+    bpf_map_update_with_telemetry(connection_protocol, conn_tuple, &empty_protocol, BPF_ANY);
+    return bpf_map_lookup_elem(&connection_protocol, conn_tuple);
+}
+
+// Forward declaration.
+static int read_conn_tuple(conn_tuple_t *t, struct sock *skp, u64 pid_tgid, metadata_mask_t type);
+
+// Common implementation for tcp_sendmsg different hooks among prebuilt/runtime binaries.
+static __always_inline void tcp_sendmsg_helper(struct sock *sk, void *buffer_ptr, size_t buffer_size) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+
+    log_debug("kprobe/tcp_sendmsg: pid_tgid: %d\n", pid_tgid);
+
+    tcp_sendmsg_args_t args = {0};
+    args.sk = sk;
+    if (!read_conn_tuple(&args.conn_tuple, args.sk, pid_tgid, CONN_TYPE_TCP)) {
+        return;
+    }
+
+    protocol_t *protocol = get_cached_protocol(&args.conn_tuple);
+    if (protocol == NULL || (*protocol != PROTOCOL_UNKNOWN && *protocol != PROTOCOL_UNCLASSIFIED)) {
+        goto final;
+    }
+
+    if (buffer_ptr == NULL) {
+        goto final;
+    }
+
+    size_t buffer_final_size = buffer_size > CLASSIFICATION_MAX_BUFFER ? (CLASSIFICATION_MAX_BUFFER - 1):buffer_size;
+    if (buffer_final_size == 0) {
+        goto final;
+    }
+
+    char local_buffer_copy[CLASSIFICATION_MAX_BUFFER] = {0};
+    bpf_probe_read_with_telemetry(local_buffer_copy, buffer_final_size, buffer_ptr);
+
+    // detect protocol
+    classify_protocol(protocol, local_buffer_copy, buffer_final_size);
+    bpf_map_update_with_telemetry(connection_protocol, &args.conn_tuple, protocol, BPF_ANY);
+
+    args.protocol = *protocol;
+final:
+    bpf_map_update_with_telemetry(tcp_sendmsg_args, &pid_tgid, &args, BPF_ANY);
 }
 
 #endif // __TRACER_EVENTS_H

@@ -3,6 +3,8 @@
 
 #include <linux/types.h>
 
+#include "protocol-classification-defs.h"
+
 #define bool _Bool
 #define true 1
 #define false 0
@@ -29,9 +31,10 @@ typedef struct {
     __u64 timestamp;
     __u32 flags;
     __u32 cookie;
-    __u8 direction;
     __u64 sent_packets;
     __u64 recv_packets;
+    __u8 direction;
+    protocol_t protocol;
 } conn_stats_ts_t;
 
 // Connection flags
@@ -157,5 +160,11 @@ typedef struct {
         struct flowi6 *fl6;
     };
 } ip_make_skb_args_t;
+
+typedef struct {
+    struct sock *sk;
+    conn_tuple_t conn_tuple;
+    protocol_t protocol;
+} tcp_sendmsg_args_t;
 
 #endif
