@@ -79,7 +79,7 @@ func New(config *config.Config, constantEditors []manager.ConstantEditor) (conne
 	var err error
 
 	if config.EnableCORE {
-		btfData = getBTF(config.BTFPath, filepath.Join(config.BPFDir, "/co-re/btf"))
+		btfData = ddebpf.GetBTF(config.BTFPath, filepath.Join(config.BPFDir, "/co-re/btf"))
 		if btfData != nil {
 			buf, err = netebpf.ReadBPFModule(filepath.Join(config.BPFDir, "/co-re"), config.BPFDebug)
 			if err != nil {
@@ -93,12 +93,12 @@ func New(config *config.Config, constantEditors []manager.ConstantEditor) (conne
 				constantEditors = []manager.ConstantEditor{}
 
 				/*
-				Note: there is a big problem with this implementation, which is that even if we find a BTF  
-				file and successfully load the co-re BPF module here, the ebpf manager could still fail to 
-				be initialized below (ie if the BTF is invalid). If that happens, then we won't properly fall 
-				back to offset guessing/runtime compilation.
+					Note: there is a big problem with this implementation, which is that even if we find a BTF
+					file and successfully load the co-re BPF module here, the ebpf manager could still fail to
+					be initialized below (ie if the BTF is invalid). If that happens, then we won't properly fall
+					back to offset guessing/runtime compilation.
 
-				For the purposes of this POC, this is acceptable, however this won't work in production.
+					For the purposes of this POC, this is acceptable, however this won't work in production.
 				*/
 			}
 		}
@@ -140,8 +140,8 @@ func New(config *config.Config, constantEditors []manager.ConstantEditor) (conne
 			Max: math.MaxUint64,
 		},
 		MapSpecEditors: map[string]manager.MapSpecEditor{
-			string(probes.ConnMap):            {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
-			string(probes.TcpStatsMap):        {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			string(probes.ConnMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
+			string(probes.TcpStatsMap): {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			// string(probes.PortBindingsMap):    {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			// string(probes.UdpPortBindingsMap): {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			// string(probes.SockByPidFDMap):     {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
@@ -400,7 +400,7 @@ func (t *kprobeTracer) GetTelemetry() map[string]int64 {
 	stats := map[string]int64{
 		// "closed_conn_polling_lost":     closeStats[perfLostStat],
 		// "closed_conn_polling_received": closeStats[perfReceivedStat],
-		"pid_collisions":               pidCollisions,
+		"pid_collisions": pidCollisions,
 
 		"tcp_sent_miscounts":         int64(telemetry.Tcp_sent_miscounts),
 		"missed_tcp_close":           int64(telemetry.Missed_tcp_close),

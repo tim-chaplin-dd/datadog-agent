@@ -6,11 +6,11 @@
 //go:build linux_bpf
 // +build linux_bpf
 
-package kprobe
+package ebpf
 
 import (
-	"path/filepath"
 	"os"
+	"path/filepath"
 
 	"github.com/cilium/ebpf/btf"
 
@@ -18,7 +18,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
-func getBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
+func GetBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
 	var btfSpec *btf.Spec
 	var err error
 
@@ -28,8 +28,6 @@ func getBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
 			log.Debugf("loaded BTF from %s", userProvidedBtfPath)
 			return btfSpec
 		}
-
-		log.Warnf("couldn't load BTF from %s: %s", userProvidedBtfPath, err)
 	}
 
 	btfSpec, err = checkEmbeddedCollection(collectionPath)
@@ -39,7 +37,7 @@ func getBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
 	}
 	log.Debugf("couldn't find BTF in embedded collection: %s", err)
 
-	btfSpec, err = btf.LoadKernelSpec() 
+	btfSpec, err = btf.LoadKernelSpec()
 	if err == nil {
 		log.Debugf("loaded BTF from default kernel location")
 		return btfSpec
@@ -54,11 +52,11 @@ func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
 	platform := si.Platform
 	kernelVersion := si.KernelVersion
 
-	path := filepath.Join(collectionPath, platform, "/", kernelVersion + ".btf")
+	path := filepath.Join(collectionPath, platform, "/", kernelVersion+".btf")
 	log.Debugf("checking embedded collection for btf at %s", path)
 
 	/*
-	Note: for the purposes of this POC the embedded BTFs aren't minimized or compressed
+		Note: for the purposes of this POC the embedded BTFs aren't minimized or compressed
 	*/
 
 	return loadBTFFrom(path)
@@ -69,6 +67,6 @@ func loadBTFFrom(path string) (*btf.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return btf.LoadSpecFromReader(data)
 }

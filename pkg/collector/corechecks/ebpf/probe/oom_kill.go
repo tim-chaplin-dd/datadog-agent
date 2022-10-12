@@ -14,14 +14,17 @@ package probe
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 
 	manager "github.com/DataDog/ebpf-manager"
 	bpflib "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 
 	"github.com/DataDog/datadog-agent/pkg/ebpf"
+	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode/runtime"
 	"github.com/DataDog/datadog-agent/pkg/process/statsd"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
@@ -41,11 +44,33 @@ type OOMKillProbe struct {
 }
 
 func NewOOMKillProbe(cfg *ebpf.Config) (*OOMKillProbe, error) {
-	compiledOutput, err := runtime.OomKill.Compile(cfg, []string{"-g"}, statsd.Client)
-	if err != nil {
-		return nil, err
+
+	// TODO check for compatability first (>= 4.9) ?
+
+	var btfData *btf.Spec = nil
+	var buf bytecode.AssetReader
+	var err error
+
+	if cfg.EnableCORE {
+		btfData = ebpf.GetBTF(cfg.BTFPath, filepath.Join(cfg.BPFDir, "co-re/btf"))
+		if btfData != nil {
+			buf, err = bytecode.GetReader(filepath.Join(cfg.BPFDir, "co-re"), "oom-kill.o")
+			if err != nil {
+				log.Warnf("error loading CO-RE version of oom-kill probe: %s", err)
+			} else {
+				log.Debugf("loaded CO-RE version of oom-kill probe")
+				defer buf.Close()
+			}
+		}
 	}
-	defer compiledOutput.Close()
+
+	if buf == nil {
+		buf, err = runtime.OomKill.Compile(cfg, []string{"-g"}, statsd.Client)
+		if err != nil {
+			return nil, err
+		}
+		defer buf.Close()
+	}
 
 	probes := []*manager.Probe{
 		{
@@ -67,9 +92,14 @@ func NewOOMKillProbe(cfg *ebpf.Config) (*OOMKillProbe, error) {
 			Cur: math.MaxUint64,
 			Max: math.MaxUint64,
 		},
+		VerifierOptions: bpflib.CollectionOptions{
+			Programs: bpflib.ProgramOptions{
+				KernelTypes: btfData,
+			},
+		},
 	}
 
-	if err := m.InitWithOptions(compiledOutput, managerOptions); err != nil {
+	if err := m.InitWithOptions(buf, managerOptions); err != nil {
 		return nil, fmt.Errorf("failed to init manager: %w", err)
 	}
 

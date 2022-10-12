@@ -223,6 +223,18 @@ def ninja_network_ebpf_programs(nw, build_dir, co_re_build_dir):
         ninja_network_ebpf_co_re_program(nw, infile, outfile, network_flags)
 
 
+def ninja_container_integrations_ebpf_programs(nw, co_re_build_dir):
+    container_integrations_co_re_dir = os.path.join("pkg", "collector", "corechecks", "ebpf", "c", "co-re")
+#     container_integrations_flags = "-Ipkg/collector/corechecks/ebpf/c -g"
+    container_integrations_co_re_flags = f"-I{container_integrations_co_re_dir}"
+    container_integrations_co_re_programs = ["oom-kill"]
+
+    for prog in container_integrations_co_re_programs:
+        infile = os.path.join(container_integrations_co_re_dir, f"{prog}.c")
+        outfile = os.path.join(co_re_build_dir, f"{prog}.o")
+        ninja_ebpf_co_re_program(nw, infile, outfile)
+
+
 def ninja_runtime_compilation_files(nw):
     bc_dir = os.path.join("pkg", "ebpf", "bytecode")
     build_dir = os.path.join(bc_dir, "build")
@@ -343,6 +355,7 @@ def ninja_generate(
             ninja_define_co_re_compiler(nw)
             ninja_network_ebpf_programs(nw, build_dir, co_re_build_dir)
             ninja_security_ebpf_programs(nw, build_dir, debug, kernel_release)
+            ninja_container_integrations_ebpf_programs(nw, co_re_build_dir)
             ninja_runtime_compilation_files(nw)
 
         ninja_cgo_type_files(nw, windows)
