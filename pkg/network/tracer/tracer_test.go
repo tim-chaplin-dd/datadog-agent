@@ -1974,7 +1974,7 @@ func TestOpenSSLVersions(t *testing.T) {
 	client.CloseIdleConnections()
 	requestsExist := make([]bool, len(requests))
 
-	var allConns *network.Connections
+	allConns := &network.Connections{}
 
 	require.Eventually(t, func() bool {
 		conns := getConnections(t, tr)
