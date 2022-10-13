@@ -23,3 +23,7 @@ func httpSupported(t *testing.T) bool {
 func httpsSupported(t *testing.T) bool {
 	return false
 }
+
+func protocolClassificationSupported(t *testing.T) bool {
+	return false
+}

@@ -54,6 +54,12 @@ func httpsSupported(t *testing.T) bool {
 	return http.HTTPSSupported(testConfig())
 }
 
+func protocolClassificationSupported(t *testing.T) bool {
+	currKernelVersion, err := kernel.HostVersion()
+	require.NoError(t, err)
+	return currKernelVersion >= kernel.VersionCode(3, 19, 0)
+}
+
 func TestTCPRemoveEntries(t *testing.T) {
 	config := testConfig()
 	config.TCPConnTimeout = 100 * time.Millisecond
@@ -1669,3 +1675,7 @@ func TestKprobeAttachWithKprobeEvents(t *testing.T) {
 
 	assert.Greater(t, p_tcp_sendmsg, int64(0))
 }
+
+//func TestProtocolClassification(t *testing.T) {
+//
+//}
