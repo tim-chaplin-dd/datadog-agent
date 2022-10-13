@@ -1974,15 +1974,23 @@ func TestOpenSSLVersions(t *testing.T) {
 	client.CloseIdleConnections()
 	requestsExist := make([]bool, len(requests))
 
+	var allConns *network.Connections
+
 	require.Eventually(t, func() bool {
 		conns := getConnections(t, tr)
 
+		// There can be a race between HTTP / HTTPs capturing to NPM connection capturing.
+		// To minimize the race, we keep all old connections, and append them to the current connections.
+		// then we look for the relevant HTTP connection in the connection list, and we give prioritization to the
+		// newer connections. We do so by appending the old connections to the end of the new connection list.
+		conns.Conns = append(conns.Conns, allConns.Conns...)
+		allConns = conns
 		if len(conns.HTTP) == 0 {
 			return false
 		}
 
 		for key := range conns.HTTP {
-			httpConn := findConnectionForHTTPRequest(key, 8001, conns)
+			httpConn := findConnectionForHTTPRequest(key, 8001, allConns)
 			require.NotNil(t, httpConn)
 			// Traffic is encrypted, thus we cannot know it is http.
 			assertConnectionProtocol(t, network.ProtocolUnknown, httpConn.Protocol)
