@@ -116,6 +116,7 @@ func TestTCPRemoveEntries(t *testing.T) {
 
 	conn, ok := findConnection(c2.LocalAddr(), c2.RemoteAddr(), connections)
 	require.True(t, ok)
+	assertConnectionProtocol(t, network.ProtocolUnknown, conn.Protocol)
 	m := conn.MonotonicSum()
 	assert.Equal(t, clientMessageSize, int(m.SentBytes))
 	assert.Equal(t, 0, int(m.RecvBytes))
@@ -171,6 +172,8 @@ func TestTCPRetransmit(t *testing.T) {
 
 	conn, ok := findConnection(c.LocalAddr(), c.RemoteAddr(), connections)
 	require.True(t, ok)
+	assertConnectionProtocol(t, network.ProtocolUnknown, conn.Protocol)
+
 	m := conn.MonotonicSum()
 	assert.Equal(t, 100*clientMessageSize, int(m.SentBytes))
 	assert.True(t, int(m.Retransmits) > 0)
@@ -1502,6 +1505,8 @@ func TestSendfileRegression(t *testing.T) {
 	}, 3*time.Second, 500*time.Millisecond, "couldn't find connection used by sendfile(2)")
 
 	assert.Equalf(t, int64(clientMessageSize), int64(conn.MonotonicSum().SentBytes), "sendfile data wasn't properly traced")
+	// We are unable to get the content of the file in "do_sendfile".
+	assertConnectionProtocol(t, network.ProtocolUnclassified, conn.Protocol)
 }
 
 func TestSendfileError(t *testing.T) {
@@ -1675,7 +1680,3 @@ func TestKprobeAttachWithKprobeEvents(t *testing.T) {
 
 	assert.Greater(t, p_tcp_sendmsg, int64(0))
 }
-
-//func TestProtocolClassification(t *testing.T) {
-//
-//}
