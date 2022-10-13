@@ -92,20 +92,22 @@ int kretprobe__tcp_sendmsg(struct pt_regs *ctx) {
         return 0;
     }
 
+    struct sock *skp = args->sk;
+
     int sent = PT_REGS_RC(ctx);
     if (sent < 0) {
         return 0;
     }
 
-    log_debug("kretprobe/tcp_sendmsg: pid_tgid: %d, sent: %d, sock: %x\n", pid_tgid, sent, args->sk);
-
-    handle_tcp_stats(&args->conn_tuple, args->sk, 0);
+    log_debug("kretprobe/tcp_sendmsg: pid_tgid: %d, sent: %d, sock: %x\n", pid_tgid, sent, skp);
+    conn_tuple_t t = args->conn_tuple;
+    handle_tcp_stats(&t, skp, 0);
 
     __u32 packets_in = 0;
     __u32 packets_out = 0;
-    get_tcp_segment_counts(args->sk, &packets_in, &packets_out);
+    get_tcp_segment_counts(skp, &packets_in, &packets_out);
 
-    return handle_message(&args->conn_tuple, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, args->protocol, args->sk);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, args->protocol, skp);
 }
 
 SEC("kprobe/tcp_cleanup_rbuf")
