@@ -133,6 +133,22 @@ static __always_inline protocol_t* get_cached_protocol(conn_tuple_t *conn_tuple)
 // Forward declaration.
 static int read_conn_tuple(conn_tuple_t *t, struct sock *skp, u64 pid_tgid, metadata_mask_t type);
 
+static __always_inline void read_into_buffer(char *buffer, char *data, size_t data_size) {
+    __builtin_memset(buffer, 0, CLASSIFICATION_MAX_BUFFER);
+
+    // we read CLASSIFICATION_MAX_BUFFER-1 bytes to ensure that the string is always null terminated
+    if (bpf_probe_read_kernel_with_telemetry(buffer, CLASSIFICATION_MAX_BUFFER - 1, data) < 0) {
+// note: arm64 bpf_probe_read_kernel() could page fault if the CLASSIFICATION_MAX_BUFFER overlap a page
+#pragma unroll(CLASSIFICATION_MAX_BUFFER - 1)
+        for (int i = 0; i < CLASSIFICATION_MAX_BUFFER - 1; i++) {
+            bpf_probe_read_user(&buffer[i], 1, &data[i]);
+            if (buffer[i] == 0) {
+                return;
+            }
+        }
+    }
+}
+
 // Common implementation for tcp_sendmsg different hooks among prebuilt/runtime binaries.
 static __always_inline void tcp_sendmsg_helper(struct sock *sk, void *buffer_ptr, size_t buffer_size) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -159,8 +175,8 @@ static __always_inline void tcp_sendmsg_helper(struct sock *sk, void *buffer_ptr
         goto final;
     }
 
-    char local_buffer_copy[CLASSIFICATION_MAX_BUFFER] = {0};
-    bpf_probe_read_with_telemetry(local_buffer_copy, buffer_final_size, buffer_ptr);
+    char local_buffer_copy[CLASSIFICATION_MAX_BUFFER];
+    read_into_buffer(local_buffer_copy, buffer_ptr, buffer_final_size);
 
     // detect protocol
     classify_protocol(protocol, local_buffer_copy, buffer_final_size);
