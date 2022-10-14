@@ -109,6 +109,7 @@ static __always_inline void* get_msghdr_buffer_ptr(struct msghdr *ptr, size_t *b
         return NULL;
     }
 
+    log_debug("[guy11]: %d\n", local_msghdr.msg_iter.iov_offset);
     struct iovec vec = {0};
     bpf_probe_read_kernel_with_telemetry(&vec, sizeof(vec), (void*)local_msghdr.msg_iter.iov);
     *buffer_size = vec.iov_len;
