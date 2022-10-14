@@ -83,9 +83,9 @@ func NewConfig() *Config {
 		EnableTracepoints:        cfg.GetBool(key(spNS, "enable_tracepoints")),
 		ProcRoot:                 util.GetProcRoot(),
 
-		EnableCORE:                 cfg.GetBool(key(spNS, "enable_co_re")),
-		BTFPath:                    cfg.GetString(key(spNS, "btf_path")),
-		
+		EnableCORE: cfg.GetBool(key(spNS, "enable_co_re")),
+		BTFPath:    cfg.GetString(key(spNS, "btf_path")),
+
 		EnableRuntimeCompiler:      cfg.GetBool(key(spNS, "enable_runtime_compiler")),
 		RuntimeCompilerOutputDir:   cfg.GetString(key(spNS, "runtime_compiler_output_dir")),
 		EnableKernelHeaderDownload: cfg.GetBool(key(spNS, "enable_kernel_header_download")),
