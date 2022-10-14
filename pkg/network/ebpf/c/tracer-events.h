@@ -136,7 +136,7 @@ static __always_inline void read_into_buffer(char *buffer, char *data, size_t da
     __builtin_memset(buffer, 0, CLASSIFICATION_MAX_BUFFER);
 
     // we read CLASSIFICATION_MAX_BUFFER-1 bytes to ensure that the string is always null terminated
-    if (bpf_probe_read_kernel_with_telemetry(buffer, CLASSIFICATION_MAX_BUFFER - 1, data) < 0) {
+//    if (bpf_probe_read_kernel_with_telemetry(buffer, CLASSIFICATION_MAX_BUFFER - 1, data) < 0) {
         log_debug("[guy]: got here\n");
 // note: arm64 bpf_probe_read_kernel() could page fault if the CLASSIFICATION_MAX_BUFFER overlap a page
 #pragma unroll(CLASSIFICATION_MAX_BUFFER - 1)
@@ -147,7 +147,7 @@ static __always_inline void read_into_buffer(char *buffer, char *data, size_t da
                 return;
             }
         }
-    }
+//    }
 }
 
 // Common implementation for tcp_sendmsg different hooks among prebuilt/runtime binaries.
