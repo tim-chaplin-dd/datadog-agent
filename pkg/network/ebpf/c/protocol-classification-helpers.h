@@ -73,7 +73,7 @@ static __always_inline void classify_protocol(protocol_t *protocol, const char *
         *protocol = PROTOCOL_UNKNOWN;
     }
 
-    log_debug("[protocol classification]: Classified protocol as %d\n", *protocol);
+    log_debug("[protocol classification]: Classified protocol as %d %d %s\n", *protocol, size, buf);
 }
 
 #endif

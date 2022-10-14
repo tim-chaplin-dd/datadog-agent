@@ -105,7 +105,6 @@ static __always_inline void* get_msghdr_buffer_ptr(struct msghdr *ptr, size_t *b
     struct msghdr local_msghdr = {0};
     bpf_probe_read_kernel_with_telemetry(&local_msghdr, sizeof(local_msghdr), ptr);
 
-
     if (local_msghdr.msg_iter.iov == NULL) {
         return NULL;
     }
@@ -138,10 +137,12 @@ static __always_inline void read_into_buffer(char *buffer, char *data, size_t da
 
     // we read CLASSIFICATION_MAX_BUFFER-1 bytes to ensure that the string is always null terminated
     if (bpf_probe_read_kernel_with_telemetry(buffer, CLASSIFICATION_MAX_BUFFER - 1, data) < 0) {
+        log_debug("[guy]: got here\n");
 // note: arm64 bpf_probe_read_kernel() could page fault if the CLASSIFICATION_MAX_BUFFER overlap a page
 #pragma unroll(CLASSIFICATION_MAX_BUFFER - 1)
         for (int i = 0; i < CLASSIFICATION_MAX_BUFFER - 1; i++) {
-            bpf_probe_read_user(&buffer[i], 1, &data[i]);
+            log_debug("[guy]: got here %d\n", i);
+            bpf_probe_read_kernel(&buffer[i], 1, &data[i]);
             if (buffer[i] == 0) {
                 return;
             }
