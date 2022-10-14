@@ -69,6 +69,9 @@ var (
 // runtimeCompilationEnvVar forces use of the runtime compiler for ebpf functionality
 const runtimeCompilationEnvVar = "DD_TESTS_RUNTIME_COMPILED"
 
+// coReEnvVar forces use of CO-RE for ebpf functionality
+const coReEnvVar = "DD_TESTS_CO_RE"
+
 func TestMain(m *testing.M) {
 	logLevel := os.Getenv("DD_LOG_LEVEL")
 	if logLevel == "" {
@@ -1800,6 +1803,12 @@ func TestRuntimeCompilerEnvironmentVar(t *testing.T) {
 	assert.NotEqual(t, enabled, cfg.AllowPrecompiledFallback)
 }
 
+func TestCoReEnvironmentVar(t *testing.T) {
+	cfg := testConfig()
+	enabled := os.Getenv(coReEnvVar) != ""
+	assert.Equal(t, enabled, cfg.EnableCORE)
+}
+
 func testConfig() *config.Config {
 	cfg := config.New()
 	if os.Getenv("BPF_DEBUG") != "" {
@@ -1810,6 +1819,11 @@ func testConfig() *config.Config {
 		cfg.AllowPrecompiledFallback = false
 	} else {
 		cfg.EnableRuntimeCompiler = false
+	}
+	if os.Getenv(coReEnvVar) != "" {
+		cfg.EnableCORE = true
+	} else {
+		cfg.EnableCORE = false
 	}
 	return cfg
 }
