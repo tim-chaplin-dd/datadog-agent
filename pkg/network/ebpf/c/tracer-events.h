@@ -180,9 +180,11 @@ static __always_inline void tcp_sendmsg_helper(struct sock *sk, void *buffer_ptr
 
     // detect protocol
     classify_protocol(protocol, local_buffer_copy, buffer_final_size);
-    bpf_map_update_with_telemetry(connection_protocol, &args.conn_tuple, protocol, BPF_ANY);
-
+    // We must copy protocol to the stack before saving it in a map.
+    // Otherwise, on old kernel we will get a verification error.
     args.protocol = *protocol;
+    bpf_map_update_with_telemetry(connection_protocol, &args.conn_tuple, &args.protocol, BPF_ANY);
+
 final:
     bpf_map_update_with_telemetry(tcp_sendmsg_args, &pid_tgid, &args, BPF_ANY);
 }
