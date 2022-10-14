@@ -522,7 +522,7 @@ def test(
     if runtime_compiled:
         env['DD_TESTS_RUNTIME_COMPILED'] = "1"
     if co_re:
-        env['DD_TESTS_CO_REdd-system-probe-check'] = "1"
+        env['DD_TESTS_CO_RE'] = "1"
 
     cmd = 'go test -mod=mod -v {failfast} -tags "{build_tags}" {output_params} {pkgs} {run}'
     if not windows and not output_path and not is_root():
