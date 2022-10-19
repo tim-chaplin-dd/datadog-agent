@@ -126,6 +126,15 @@ static __always_inline void http_parse_data(char const *p, http_packet_t *packet
     } else if ((p[0] == 'P') && (p[1] == 'A') && (p[2] == 'T') && (p[3] == 'C') && (p[4] == 'H') && (p[5]  == ' ') && (p[6] == '/')) {
         *packet_type = HTTP_REQUEST;
         *method = HTTP_PATCH;
+    } else if ((p[0] == 'P') && (p[1] == 'R') && (p[2] == 'I') && (p[3] == ' ') && (p[4] == '*') && (p[5] == ' ')
+          && (p[6] == 'H') && (p[7] == 'T') && (p[8] == 'T') && (p[9] == 'P') && (p[10] == '/') && (p[11] == '2') && (p[12] == '.') && (p[13] == '0')
+          && (p[14] == '\r') && (p[15] == '\n')
+          && (p[16] == '\r') && (p[17] == '\n')
+          && (p[18] == 'S') && (p[19] == 'M')
+          && (p[20] == '\r') && (p[21] == '\n')
+          && (p[22] == '\r') && (p[23] == '\n')) {
+          *packet_type = HTTP2_REQUEST;
+          *method = HTTP_POST;
     }
 }
 
@@ -206,6 +215,8 @@ static __always_inline int http_process(http_transaction_t *http_stack, skb_info
     } else if (packet_type == HTTP_RESPONSE) {
         http_begin_response(http, buffer);
         http_update_seen_before(http, skb_info);
+    } else if (packet_type == HTTP2_REQUEST) {
+        log_debug("http/2 request was found successfully\n");
     }
 
     http->tags |= tags;

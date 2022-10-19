@@ -14,6 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -43,6 +45,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 )
 
 type connTag = uint64
@@ -1711,6 +1714,66 @@ func TestHTTPStats(t *testing.T) {
 	assert.Nil(t, httpReqStats.Stats(300), "300s")            // 300
 	assert.Nil(t, httpReqStats.Stats(400), "400s")            // 400
 	assert.Nil(t, httpReqStats.Stats(500), "500s")            // 500
+}
+
+const bufSize = 1024 * 1024
+
+var lis *bufconn.Listener
+
+type server struct {
+	pb.UnimplementedGreeterServer
+}
+
+// SayHello implements helloworld.GreeterServer
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	print("Received: %v", in.GetName())
+	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+}
+
+func init() {
+	lis = bufconn.Listen(bufSize)
+	s := grpc.NewServer()
+	pb.RegisterGreeterServer(s, &server{})
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			print("Server exited with error: %v", err)
+		}
+	}()
+}
+
+func bufDialer(context.Context, string) (net.Conn, error) {
+	return lis.Dial()
+}
+
+func TestHTTP2Stats(t *testing.T) {
+	if !httpSupported(t) {
+		t.Skip("HTTP monitoring feature not available")
+		return
+	}
+
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.BPFDebug = true
+	tr, err := NewTracer(cfg)
+	require.NoError(t, err)
+	defer tr.Stop()
+
+	initTracerState(t, tr)
+
+	// Start grpc server
+	conn, err := grpc.Dial("127.0.0.1:50051", grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to test server: %v", err)
+	}
+	defer conn.Close()
+
+	// send request to grpc server
+	client := pb.NewGreeterClient(conn)
+	_, err = client.SayHello(context.Background(), &pb.HelloRequest{})
+	if err != nil {
+		t.Fatalf("SayHello failed: %v", err)
+	}
+
 }
 
 func TestHTTPSViaLibraryIntegration(t *testing.T) {
