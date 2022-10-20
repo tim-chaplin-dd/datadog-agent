@@ -18,7 +18,7 @@
   artifacts:
     expire_in: 1 day
     paths:
-      - $CI_PROJECT_DIR/minimized-btfs.tar.gz
+      - $CI_PROJECT_DIR/minimized-btfs/minimized-btfs.tar.gz
 
 
 generate_minimized_btfs_x64:
