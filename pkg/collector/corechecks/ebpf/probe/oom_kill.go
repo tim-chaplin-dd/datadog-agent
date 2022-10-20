@@ -60,9 +60,9 @@ func NewOOMKillProbe(cfg *ebpf.Config) (*OOMKillProbe, error) {
 }
 
 func loadCOREProbe(cfg *ebpf.Config) (*OOMKillProbe, error) {
-	btfData := ebpf.GetBTF(cfg.BTFPath, filepath.Join(cfg.BPFDir, "co-re/btf"))
+	btfData, err := ebpf.GetBTF(cfg.BTFPath, filepath.Join(cfg.BPFDir, "co-re/btf"))
 	if btfData == nil {
-		return nil, fmt.Errorf("could not find BTF data on host")
+		return nil, fmt.Errorf("could not find BTF data on host: %s", err)
 	}
 
 	buf, err := bytecode.GetReader(filepath.Join(cfg.BPFDir, "co-re"), "oom-kill.o")

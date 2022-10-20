@@ -20,7 +20,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
-func GetBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
+func GetBTF(userProvidedBtfPath, collectionPath string) (*btf.Spec, error) {
 	var btfSpec *btf.Spec
 	var err error
 
@@ -28,25 +28,27 @@ func GetBTF(userProvidedBtfPath, collectionPath string) *btf.Spec {
 		btfSpec, err = loadBTFFrom(userProvidedBtfPath)
 		if err == nil {
 			log.Debugf("loaded BTF from %s", userProvidedBtfPath)
-			return btfSpec
+			return btfSpec, nil
 		}
 	}
+
+	// TODO check this after embedded collection
+	btfSpec, err = btf.LoadKernelSpec()
+	if err == nil {
+		log.Debugf("loaded BTF from default kernel location")
+		return btfSpec, nil
+	}
+	log.Debugf("couldn't find BTF in default kernel locations: %s", err)
+	//
 
 	btfSpec, err = checkEmbeddedCollection(collectionPath)
 	if err == nil {
 		log.Debugf("loaded BTF from embedded collection")
-		return btfSpec
+		return btfSpec, nil
 	}
 	log.Debugf("couldn't find BTF in embedded collection: %s", err)
 
-	btfSpec, err = btf.LoadKernelSpec()
-	if err == nil {
-		log.Debugf("loaded BTF from default kernel location")
-		return btfSpec
-	}
-	log.Debugf("couldn't find BTF in default kernel locations: %s", err)
-
-	return nil
+	return nil, err
 }
 
 func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
@@ -63,7 +65,7 @@ func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
 func loadBTFFrom(path string) (*btf.Spec, error) {
 	// All embedded BTFs must first be decompressed
 	if err := archiver.NewTarXz().Unarchive(path+".tar.xz", path); err != nil {
-		return nil, fmt.Errorf("unable to extract btf file: %w", err)
+		return nil, fmt.Errorf("unable to extract btf file from %s: %w", path, err)
 	}
 
 	data, err := os.Open(path)
