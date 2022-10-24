@@ -125,8 +125,3 @@ execute 'extract minimized btfs' do
   command 'tar -xf minimized-btfs.tar.gz -C /tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf/'
   action :run
 end
-
-execute 'check minimized BTF installation' do
-  command 'ls -R /tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re && 0 && -1'
-  action :run
-end
