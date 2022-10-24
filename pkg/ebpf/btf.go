@@ -9,7 +9,6 @@
 package ebpf
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -48,6 +47,14 @@ func GetBTF(userProvidedBtfPath, collectionPath string) (*btf.Spec, error) {
 	}
 	log.Debugf("couldn't find BTF in embedded collection: %s", err)
 
+	btfSpec, _ = btf.LoadKernelSpec()
+	// if err == nil {
+	if btfSpec != nil {
+		log.Debugf("loaded BTF from default kernel location")
+		return btfSpec, nil
+	}
+	log.Debugf("couldn't find BTF in default kernel locations: %s", err)
+
 	return nil, err
 }
 
@@ -65,7 +72,7 @@ func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
 func loadBTFFrom(path string) (*btf.Spec, error) {
 	// All embedded BTFs must first be decompressed
 	if err := archiver.NewTarXz().Unarchive(path+".tar.xz", path); err != nil {
-		return nil, fmt.Errorf("unable to extract btf file from %s: %w", path, err)
+		return nil, err
 	}
 
 	data, err := os.Open(path)
