@@ -9,13 +9,10 @@
 package ebpf
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/cilium/ebpf/btf"
 	"github.com/mholt/archiver/v3"
+	"os"
 
-	"github.com/DataDog/datadog-agent/pkg/metadata/host"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
@@ -40,12 +37,12 @@ func GetBTF(userProvidedBtfPath, collectionPath string) (*btf.Spec, error) {
 	log.Debugf("couldn't find BTF in default kernel locations: %s", err)
 	//
 
-	btfSpec, err = checkEmbeddedCollection(collectionPath)
-	if err == nil {
-		log.Debugf("loaded BTF from embedded collection")
-		return btfSpec, nil
-	}
-	log.Debugf("couldn't find BTF in embedded collection: %s", err)
+	//btfSpec, err = checkEmbeddedCollection(collectionPath)
+	//if err == nil {
+	//	log.Debugf("loaded BTF from embedded collection")
+	//	return btfSpec, nil
+	//}
+	//log.Debugf("couldn't find BTF in embedded collection: %s", err)
 
 	btfSpec, _ = btf.LoadKernelSpec()
 	// if err == nil {
@@ -56,17 +53,6 @@ func GetBTF(userProvidedBtfPath, collectionPath string) (*btf.Spec, error) {
 	log.Debugf("couldn't find BTF in default kernel locations: %s", err)
 
 	return nil, err
-}
-
-func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
-	si := host.GetStatusInformation()
-	platform := si.Platform
-	kernelVersion := si.KernelVersion
-
-	path := filepath.Join(collectionPath, platform, "/", kernelVersion+".btf")
-	log.Debugf("checking embedded collection for btf at %s", path)
-
-	return loadBTFFrom(path)
 }
 
 func loadBTFFrom(path string) (*btf.Spec, error) {
