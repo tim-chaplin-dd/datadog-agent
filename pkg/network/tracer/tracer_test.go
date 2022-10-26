@@ -2137,7 +2137,12 @@ func TestDocker(t *testing.T) {
 	cmd := exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "up")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	go cmd.Run()
+	go func() {
+		if err := cmd.Run(); err != nil {
+			fmt.Println("error", err)
+		}
+		fmt.Println("bla")
+	}()
 
 	defer exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "down").Run()
 	time.Sleep(time.Second * 5)
