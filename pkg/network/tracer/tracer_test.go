@@ -2089,3 +2089,8 @@ func isRequestIncluded(allStats map[http.Key]*http.RequestStats, req *nethttp.Re
 
 	return false
 }
+
+func TestDocker(t *testing.T) {
+	cmd := exec.Command("docker", "ps")
+	require.NoError(t, cmd.Run())
+}

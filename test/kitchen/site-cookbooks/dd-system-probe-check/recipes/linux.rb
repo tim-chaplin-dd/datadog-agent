@@ -7,6 +7,8 @@ case node[:platform]
     apt_update
 end
 
+docker_installation 'default'
+
 execute "update yum repositories" do
   command "yum -y update"
   user "root"
