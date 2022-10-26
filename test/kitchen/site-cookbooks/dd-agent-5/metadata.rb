@@ -7,4 +7,3 @@ version          "0.2.0"
 depends 'apt', '>= 2.1.0'
 depends 'datadog'
 depends 'yum', '< 7.0.0'
-depends 'docker'
