@@ -8,6 +8,7 @@ case node[:platform]
 end
 
 docker_installation 'default'
+docker_compose
 
 execute "update yum repositories" do
   command "yum -y update"
