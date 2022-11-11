@@ -214,7 +214,7 @@ func testRunCheck(t *testing.T) {
 	assert.Equal(t, C.int(1), C.get_checks_warnings_calls)
 
 	assert.Equal(t, check.instance, C.run_check_instance)
-	assert.Equal(t, check.lastWarnings, []error{fmt.Errorf("warn1"), fmt.Errorf("warn2")})
+	assert.Equal(t, check.GetWarnings(), []error{fmt.Errorf("warn1"), fmt.Errorf("warn2")})
 }
 
 func testRunCheckWithRuntimeNotInitializedError(t *testing.T) {
@@ -494,7 +494,6 @@ func testRun(t *testing.T) {
 	}
 
 	c.instance = newMockPyObjectPtr()
-	c.id = check.ID("testID")
 
 	C.reset_check_mock()
 	C.run_check_return = C.CString("")
@@ -527,7 +526,6 @@ func testRunSimple(t *testing.T) {
 	}
 
 	c.instance = newMockPyObjectPtr()
-	c.id = check.ID("testID")
 
 	C.reset_check_mock()
 	C.run_check_return = C.CString("")
@@ -568,8 +566,8 @@ func testConfigure(t *testing.T) {
 	assert.Equal(t, c.class, C.get_check_py_class)
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_init_config))
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_instance))
-	assert.Equal(t, string(c.id), C.GoString(C.get_check_check_id))
-	assert.Equal(t, "fake_check", C.GoString(C.get_check_check_name))
+	assert.Equal(t, string(c.ID()), C.GoString(C.get_check_check_id))
+	assert.Equal(t, "testID", C.GoString(C.get_check_check_name))
 	assert.Equal(t, C.get_check_check, c.instance)
 
 	assert.Nil(t, C.get_check_deprecated_py_class)
@@ -603,22 +601,22 @@ func testConfigureDeprecated(t *testing.T) {
 	assert.Equal(t, c.class, C.get_check_py_class)
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_init_config))
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_instance))
-	assert.Equal(t, string(c.id), C.GoString(C.get_check_check_id))
-	assert.Equal(t, "fake_check", C.GoString(C.get_check_check_name))
+	assert.Equal(t, string(c.ID()), C.GoString(C.get_check_check_id))
+	assert.Equal(t, "testID", C.GoString(C.get_check_check_name))
 	assert.Nil(t, C.get_check_check)
 
 	assert.Equal(t, c.class, C.get_check_deprecated_py_class)
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_deprecated_init_config))
 	assert.Equal(t, "{\"val\": 21}", C.GoString(C.get_check_deprecated_instance))
-	assert.Equal(t, string(c.id), C.GoString(C.get_check_deprecated_check_id))
-	assert.Equal(t, "fake_check", C.GoString(C.get_check_deprecated_check_name))
+	assert.Equal(t, string(c.ID()), C.GoString(C.get_check_deprecated_check_id))
+	assert.Equal(t, "testID", C.GoString(C.get_check_deprecated_check_name))
 	require.NotNil(t, C.get_check_deprecated_agent_config)
 	assert.NotEqual(t, "", C.GoString(C.get_check_deprecated_agent_config))
 	assert.Equal(t, c.instance, C.get_check_deprecated_check)
 }
 
 func NewPythonFakeCheck() (*PythonCheck, error) {
-	c, err := NewPythonCheck("fake_check", nil)
+	c, err := NewPythonCheck("testID", nil)
 
 	// Remove check finalizer that may trigger race condition while testing
 	if err == nil {

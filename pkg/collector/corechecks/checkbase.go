@@ -232,6 +232,11 @@ func (c *CheckBase) GetWarnings() []error {
 	return w
 }
 
+// SetWarnings updates the list of latest check warnings.
+func (c *CheckBase) SetWarnings(w []error) {
+	c.latestWarnings = append(c.latestWarnings, w...)
+}
+
 // GetSender gets the object to which metrics for this check should be sent.
 //
 // This is a "safe" sender, specialized to avoid some common errors, at a very
