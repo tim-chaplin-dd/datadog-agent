@@ -1,33 +1,9 @@
 #ifndef __HTTP2_H
 #define __HTTP2_H
 
-// A limit of max frames we will upload from a single connection to the user mode.
-// NOTE: we may need to revisit this const if we need to capture more connections.
-#define HTTP2_MAX_FRAMES 40
+#include "http2-defs.h"
 
-// All types of http2 frames exist in the protocol.
-// Checkout https://datatracker.ietf.org/doc/html/rfc7540 under "Frame Type Registry" section.
-typedef enum {
-    kDataFrame          = 0,
-    kHeadersFrame       = 1,
-    kPriorityFrame      = 2,
-    kRSTStreamFrame     = 3,
-    kSettingsFrame      = 4,
-    kPushPromiseFrame   = 5,
-    kPingFrame          = 6,
-    kGoAwayFrame        = 7,
-    kWindowUpdateFrame  = 8,
-    kContinuationFrame  = 9,
-} __attribute__ ((packed)) frame_type_t;
-
-// Struct which represent the http2 frame by its fields.
-// Checkout https://datatracker.ietf.org/doc/html/rfc7540#section-4.1 for frame format.
-struct http2_frame {
-    uint32_t length;
-    frame_type_t type;
-    uint8_t flags;
-    uint32_t stream_id;
-};
+BPF_HASH_MAP(static_table, u8, struct static_table_value, 100);
 
 static __always_inline uint32_t as_uint32_t(unsigned char input) {
     return (uint32_t)input;
@@ -71,6 +47,61 @@ static __always_inline bool read_http2_frame_header(const char *buf, size_t buf_
     return true;
 }
 
+// readVarInt reads an unsigned variable length integer off the
+// beginning of p. n is the parameter as described in
+// https://httpwg.org/specs/rfc7541.html#rfc.section.5.1.
+//
+// n must always be between 1 and 8.
+//
+// The returned remain buffer is either a smaller suffix of p, or err != nil.
+// The error is errNeedMore if p doesn't contain a complete integer.
+//static __always_inline bool read_var_int(uint32_t n, const char *buf)){
+//    if ((n < 1) | (n > 8)) {
+//        return false;
+//    }
+//    i = uint32_t(buf[0])
+//    if (n < 8) {
+//        i &= (1 << uint32_t(n)) -1
+//    }
+//    if (i < (1<<uint32_t(n)) -1 ) {
+//    }
+//
+//}
+
+//static __always_inline bool parse_field_indexed(const char *buf)){
+//}
+
+static __always_inline bool parse_header_field_repr(const char *buf){
+    for (uint32_t i = 0; i < 9; ++i) {
+        log_debug("[slavin]------bla------- %d", buf[i]);
+    }
+    if ((buf[0]&128) != 0) {
+        // Indexed representation.
+        // High bit set?
+        // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
+        log_debug("[slavin] wowow");
+        return false;
+    }
+    return true;
+}
+
+// This function reads the http2 frame header and validate the frame.
+static __always_inline bool read_http2_header_frame(const char *buf, struct http2_frame *current_frame) {
+    if (buf == NULL) {
+        return false;
+    }
+
+    if (is_empty_frame_header(buf)) {
+        return false;
+    }
+
+    if (!parse_header_field_repr(buf)) {
+        return false;
+    }
+
+    return true;
+}
+
 // This function filters the needed frames from the http2 session.
 static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t pos) {
     struct http2_frame current_frame = {};
@@ -99,7 +130,12 @@ static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t p
             continue;
         }
 
-        // TODO: read headers frame
+        bpf_skb_load_bytes(skb, pos, buf, HTTP2_FRAME_HEADER_SIZE);
+        // Load the current frame into http2_frame strct in order to filter the needed frames.
+        if (!read_http2_header_frame(buf, &current_frame)){
+            log_debug("unable to read http2 header frame");
+            break;
+        }
         pos += (__u32)current_frame.length;
     }
 

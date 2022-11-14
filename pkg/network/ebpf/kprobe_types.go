@@ -12,6 +12,7 @@ package ebpf
 #include "./c/tracer.h"
 #include "./c/tcp_states.h"
 #include "./c/prebuilt/offset-guess.h"
+#include "./c/http2-defs.h"
 */
 import "C"
 
@@ -25,6 +26,8 @@ type PortBinding C.port_binding_t
 type PIDFD C.pid_fd_t
 type UDPRecvSock C.udp_recv_sock_t
 type BindSyscallArgs C.bind_syscall_args_t
+
+type StaticTableValue C.static_table_value
 
 // udp_recv_sock_t have *sock and *msghdr struct members, we make them opaque here
 type _Ctype_struct_sock uint64
