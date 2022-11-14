@@ -70,6 +70,11 @@ type BindSyscallArgs struct {
 	Port uint16
 }
 
+type StaticTableValue struct {
+	Name  uint8
+	Value uint8
+}
+
 type _Ctype_struct_sock uint64
 type _Ctype_struct_msghdr uint64
 

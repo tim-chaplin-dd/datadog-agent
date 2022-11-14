@@ -45,10 +45,10 @@ typedef enum {
     kSchemeHTTP,
 } __attribute__ ((packed)) header_value;
 
-struct static_table_value {
+typedef struct {
     header_key name;
     header_value value;
-};
+} static_table_value;
 
 #define MAX_STATIC_TABLE_INDEX 64
 

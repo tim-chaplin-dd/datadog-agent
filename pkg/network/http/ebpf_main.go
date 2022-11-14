@@ -10,14 +10,6 @@ package http
 
 import (
 	"fmt"
-	"math"
-	"os"
-
-	manager "github.com/DataDog/ebpf-manager"
-	"github.com/cilium/ebpf"
-	"github.com/iovisor/gobpf/pkg/cpupossible"
-	"golang.org/x/sys/unix"
-
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
@@ -25,6 +17,13 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/ebpf/probes"
 	errtelemetry "github.com/DataDog/datadog-agent/pkg/network/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	manager "github.com/DataDog/ebpf-manager"
+	"github.com/cilium/ebpf"
+	"github.com/iovisor/gobpf/pkg/cpupossible"
+	"golang.org/x/sys/unix"
+	"math"
+	"os"
+	"unsafe"
 )
 
 const (
@@ -110,6 +109,7 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 			{Name: "bio_new_socket_args"},
 			{Name: "fd_by_ssl_bio"},
 			{Name: "ssl_ctx_by_pid_tgid"},
+			{Name: "http2_static_table"},
 		},
 		PerfMaps: []*manager.PerfMap{
 			{
@@ -265,6 +265,38 @@ func (e *ebpfProgram) Init() error {
 	err = e.InitWithOptions(e.bytecode, options)
 	if err != nil {
 		return err
+	}
+
+	staticTable, _, err := e.Manager.GetMap(string(probes.StaticTableMap))
+	if err == nil {
+		type Bla struct {
+			Index uint64
+			Name  uint8
+			Value uint8
+		}
+
+		staticTableEntries := []Bla{
+			{
+				Index: 0,
+				Name:  1,
+			},
+			{
+				Index: 1,
+				Name:  3,
+				Value: 223,
+			},
+		}
+		v := true
+
+		for _, entry := range staticTableEntries {
+			//if err := mp.Lookup(unsafe.Pointer(&zero), unsafe.Pointer(telemetry)); err != nil {
+
+			err := staticTable.Put(unsafe.Pointer(&entry.Index), unsafe.Pointer(&v))
+
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
 	}
 
 	return nil

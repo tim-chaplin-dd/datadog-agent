@@ -1,9 +1,12 @@
 #ifndef __HTTP2_H
 #define __HTTP2_H
 
+#include "bpf_helpers.h"
+#include "map-defs.h"
 #include "http2-defs.h"
 
-BPF_HASH_MAP(static_table, u8, struct static_table_value, 100);
+//BPF_HASH_MAP(http2_static_table, u8, static_table_value, 100);
+BPF_HASH_MAP(http2_static_table, u64, bool, 10)
 
 static __always_inline uint32_t as_uint32_t(unsigned char input) {
     return (uint32_t)input;
@@ -106,6 +109,14 @@ static __always_inline bool read_http2_header_frame(const char *buf, struct http
 static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t pos) {
     struct http2_frame current_frame = {};
     char buf[HTTP2_FRAME_HEADER_SIZE];
+
+    __u64 key = 0;
+    bool *value = bpf_map_lookup_elem(&http2_static_table, &key);
+    if (value != NULL) {
+        log_debug("this is a test %d", *value);
+    } else {
+        log_debug("this is a test NULL");
+    }
 
 #pragma unroll
     // Iterate till max frames to avoid high connection rate.

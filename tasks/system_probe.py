@@ -287,6 +287,7 @@ def ninja_cgo_type_files(nw, windows):
             "pkg/network/ebpf/tuple_types.go": ["pkg/network/ebpf/c/tracer.h"],
             "pkg/network/ebpf/kprobe_types.go": [
                 "pkg/network/ebpf/c/tracer.h",
+                "pkg/network/ebpf/c/http2-defs.h",
                 "pkg/network/ebpf/c/tcp_states.h",
                 "pkg/network/ebpf/c/tags-types.h",
                 "pkg/network/ebpf/c/prebuilt/offset-guess.h",
