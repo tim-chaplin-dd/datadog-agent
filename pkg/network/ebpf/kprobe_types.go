@@ -27,6 +27,34 @@ type PIDFD C.pid_fd_t
 type UDPRecvSock C.udp_recv_sock_t
 type BindSyscallArgs C.bind_syscall_args_t
 
+type StaticTableEnumKey = C.header_key
+
+const (
+	AuthorityKey StaticTableEnumKey = C.kAuthority
+	MethodKey    StaticTableEnumKey = C.kMethod
+	PathKey      StaticTableEnumKey = C.kPath
+	SchemeKey    StaticTableEnumKey = C.kScheme
+	StatusKey    StaticTableEnumKey = C.kStatus
+)
+
+type StaticTableEnumValue = C.header_value
+
+const (
+	GetValue       StaticTableEnumValue = C.kGET
+	PostValue      StaticTableEnumValue = C.kPOST
+	EmptyPathValue StaticTableEnumValue = C.kEmptyPath
+	IndexPathValue StaticTableEnumValue = C.kIndexPath
+	HttpValue      StaticTableEnumValue = C.kHTTP
+	HttpsValue     StaticTableEnumValue = C.kHTTPS
+	K200Value      StaticTableEnumValue = C.k200
+	K204Value      StaticTableEnumValue = C.k204
+	K206Value      StaticTableEnumValue = C.k206
+	K304Value      StaticTableEnumValue = C.k304
+	K400Value      StaticTableEnumValue = C.k400
+	K404Value      StaticTableEnumValue = C.k404
+	K500Value      StaticTableEnumValue = C.k500
+)
+
 type StaticTableValue C.static_table_value
 
 // udp_recv_sock_t have *sock and *msghdr struct members, we make them opaque here

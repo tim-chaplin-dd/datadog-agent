@@ -3,6 +3,7 @@
 
 #include <linux/types.h>
 
+#define MAX 8*40
 
 // A limit of max frames we will upload from a single connection to the user mode.
 // NOTE: we may need to revisit this const if we need to capture more connections.
@@ -33,16 +34,28 @@ struct http2_frame {
 };
 
 typedef enum {
-    kAuthority = 0,
-    kMethod,
-    kPath,
-    kScheme,
-    kStatus,
+    kAuthority = 1,
+    kMethod = 2,
+    kPath = 4,
+    kScheme = 6,
+    kStatus = 9,
 } __attribute__ ((packed)) header_key;
 
 typedef enum {
-    kGET = 0,
-    kSchemeHTTP,
+    kGET = 2,
+    kPOST = 3,
+    kEmptyPath = 4,
+    kIndexPath = 5,
+    kHTTP = 6,
+    kHTTPS = 7,
+    k200 = 8,
+    k204 = 9,
+    k206 = 10,
+    k304 = 11,
+    k400 = 12,
+    k404 = 13,
+    k500 = 14,
+
 } __attribute__ ((packed)) header_value;
 
 typedef struct {

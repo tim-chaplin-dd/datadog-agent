@@ -269,29 +269,113 @@ func (e *ebpfProgram) Init() error {
 
 	staticTable, _, err := e.Manager.GetMap(string(probes.StaticTableMap))
 	if err == nil {
-		type Bla struct {
+		type staticTableEntry struct {
 			Index uint64
-			Name  uint8
-			Value uint8
+			Value netebpf.StaticTableValue
 		}
 
-		staticTableEntries := []Bla{
-			{
-				Index: 0,
-				Name:  1,
-			},
+		staticTableEntries := []staticTableEntry{
 			{
 				Index: 1,
-				Name:  3,
-				Value: 223,
+				Value: netebpf.StaticTableValue{
+					Name: netebpf.AuthorityKey,
+				},
+			},
+			{
+				Index: 2,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.MethodKey,
+					Value: netebpf.GetValue,
+				},
+			},
+			{
+				Index: 3,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.MethodKey,
+					Value: netebpf.PostValue,
+				},
+			},
+			{
+				Index: 4,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.PathKey,
+					Value: netebpf.EmptyPathValue,
+				},
+			},
+			{
+				Index: 5,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.PathKey,
+					Value: netebpf.IndexPathValue,
+				},
+			},
+			{
+				Index: 6,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.SchemeKey,
+					Value: netebpf.HttpValue,
+				},
+			},
+			{
+				Index: 7,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.SchemeKey,
+					Value: netebpf.HttpsValue,
+				},
+			},
+			{
+				Index: 8,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K200Value,
+				},
+			},
+			{
+				Index: 9,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K204Value,
+				},
+			},
+			{
+				Index: 10,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K206Value,
+				},
+			},
+			{
+				Index: 11,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K304Value,
+				},
+			},
+			{
+				Index: 12,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K400Value,
+				},
+			},
+			{
+				Index: 13,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K404Value,
+				},
+			},
+			{
+				Index: 14,
+				Value: netebpf.StaticTableValue{
+					Name:  netebpf.StatusKey,
+					Value: netebpf.K500Value,
+				},
 			},
 		}
-		v := true
 
 		for _, entry := range staticTableEntries {
-			//if err := mp.Lookup(unsafe.Pointer(&zero), unsafe.Pointer(telemetry)); err != nil {
-
-			err := staticTable.Put(unsafe.Pointer(&entry.Index), unsafe.Pointer(&v))
+			err := staticTable.Put(unsafe.Pointer(&entry.Index), unsafe.Pointer(&entry.Value))
 
 			if err != nil {
 				fmt.Println(err)

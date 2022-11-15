@@ -5,8 +5,7 @@
 #include "map-defs.h"
 #include "http2-defs.h"
 
-//BPF_HASH_MAP(http2_static_table, u8, static_table_value, 100);
-BPF_HASH_MAP(http2_static_table, u64, bool, 10)
+BPF_HASH_MAP(http2_static_table, u64, static_table_value, 20)
 
 static __always_inline uint32_t as_uint32_t(unsigned char input) {
     return (uint32_t)input;
@@ -50,7 +49,7 @@ static __always_inline bool read_http2_frame_header(const char *buf, size_t buf_
     return true;
 }
 
-// readVarInt reads an unsigned variable length integer off the
+// read_var_int reads an unsigned variable length integer off the
 // beginning of p. n is the parameter as described in
 // https://httpwg.org/specs/rfc7541.html#rfc.section.5.1.
 //
@@ -58,38 +57,60 @@ static __always_inline bool read_http2_frame_header(const char *buf, size_t buf_
 //
 // The returned remain buffer is either a smaller suffix of p, or err != nil.
 // The error is errNeedMore if p doesn't contain a complete integer.
-//static __always_inline bool read_var_int(uint32_t n, const char *buf)){
-//    if ((n < 1) | (n > 8)) {
-//        return false;
-//    }
-//    i = uint32_t(buf[0])
-//    if (n < 8) {
-//        i &= (1 << uint32_t(n)) -1
-//    }
-//    if (i < (1<<uint32_t(n)) -1 ) {
-//    }
-//
-//}
-
-//static __always_inline bool parse_field_indexed(const char *buf)){
-//}
-
-static __always_inline bool parse_header_field_repr(const char *buf){
-    for (uint32_t i = 0; i < 9; ++i) {
-        log_debug("[slavin]------bla------- %d", buf[i]);
+static __always_inline uint64_t read_var_int(char *buf, uint32_t n, int *pos){
+    uint64_t i = (uint64_t)(buf[0]);
+    if (n < 8) {
+        i &= ((1 << (uint64_t)(n)) -1);
     }
-    if ((buf[0]&128) != 0) {
-        // Indexed representation.
-        // High bit set?
-        // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
-        log_debug("[slavin] wowow");
-        return false;
+    if (i < ((1 << (uint64_t)(n)) -1)) {
+        size_t val = *pos;
+        *pos = val + 1;
+        return i;
+    }
+    return 0; // unreachable index
+}
+
+static __always_inline bool parse_field_indexed(char *buf, int *pos){
+    __u64 key = read_var_int(buf, 7, pos);
+    if (key == 0) {
+        log_debug("unable to find index from read_var_int");
+    }
+
+    log_debug("[slavin] the index is: %d", key);
+
+    static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &key);
+    if (static_value != NULL) {
+        log_debug("[slavin] the name is %d", static_value->name);
+        log_debug("[slavin] the value is %d", static_value->value);
+    } else {
+        log_debug("[slavin] value is null");
+    }
+    return true;
+}
+
+static __always_inline bool parse_header_field_repr(char *buf){
+    int pos = 0;
+
+#pragma unroll(9)
+    for (int i = 0; i < 9; i++) {
+        if (pos >= 9) {
+            return true;
+        }
+        char *buf2 = buf + pos;
+        log_debug("[slavin]------bla------- %d", buf2);
+        __u8 val = (__u8)(*buf2);
+        if ((val&128) != 0) {
+            // Indexed representation.
+            // High bit set?
+            // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
+            parse_field_indexed(buf2, &pos);
+        }
     }
     return true;
 }
 
 // This function reads the http2 frame header and validate the frame.
-static __always_inline bool read_http2_header_frame(const char *buf, struct http2_frame *current_frame) {
+static __always_inline bool read_http2_header_frame(char *buf, struct http2_frame *current_frame) {
     if (buf == NULL) {
         return false;
     }
@@ -109,14 +130,6 @@ static __always_inline bool read_http2_header_frame(const char *buf, struct http
 static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t pos) {
     struct http2_frame current_frame = {};
     char buf[HTTP2_FRAME_HEADER_SIZE];
-
-    __u64 key = 0;
-    bool *value = bpf_map_lookup_elem(&http2_static_table, &key);
-    if (value != NULL) {
-        log_debug("this is a test %d", *value);
-    } else {
-        log_debug("this is a test NULL");
-    }
 
 #pragma unroll
     // Iterate till max frames to avoid high connection rate.
