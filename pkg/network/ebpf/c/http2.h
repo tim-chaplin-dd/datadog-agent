@@ -100,7 +100,7 @@ static __always_inline void parse_field_indexed(const char *payload, size_t *pos
 }
 
 static __always_inline void parse_header_field_repr(const char *payload) {
-    size_t pos = 0;
+    volatile size_t pos = 0; // talk to Ussuma!
 
 #pragma unroll
     for (int i = 0; i < 3; i++) {
@@ -109,7 +109,7 @@ static __always_inline void parse_header_field_repr(const char *payload) {
         log_debug("[http2] first char %d", first_char);
         if ((first_char&128) != 0) {
             log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
-            parse_field_indexed(payload, &pos);
+            parse_field_indexed(payload, (size_t*)&pos);
 //        } if ((first_char&192) == 64) {
 //            log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
 //            parse_field_literal(payload, &pos);
