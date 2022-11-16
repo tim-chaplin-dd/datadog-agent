@@ -100,7 +100,7 @@ static __always_inline void parse_field_indexed(const char *payload, size_t *pos
 }
 
 static __always_inline void parse_header_field_repr(const char *payload) {
-    volatile size_t pos = 0; // talk to Ussuma!
+    volatile size_t pos = 0; // understand ?!
 
 #pragma unroll
     for (int i = 0; i < 3; i++) {
