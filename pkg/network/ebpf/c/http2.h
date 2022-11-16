@@ -74,15 +74,19 @@ static __always_inline __u64 read_var_int(const char *payload, size_t *pos, char
         return index;
     }
 
-    // Error
+    // TODO: compare with original code.
     return -1;
 }
 
 static __always_inline void parse_field_indexed(const char *payload, size_t *pos){
     __u64 index = read_var_int(payload, pos, 7);
     if (index) {
-        log_debug("[http2] the index is %llu", index);
+        log_debug("[http2] the index is %llu, pos is now %d", index, *pos);
     }
+
+    // Pull from static table and print name and value
+
+
 //
 //    log_debug("[slavin] the index is: %d", key);
 //
@@ -96,14 +100,21 @@ static __always_inline void parse_field_indexed(const char *payload, size_t *pos
 }
 
 static __always_inline void parse_header_field_repr(const char *payload) {
-    char first_char = payload[0];
-
     size_t pos = 0;
-    if ((first_char&128) != 0) {
-        log_debug("[http2] first char %d & 128 != 0; calling parse_field_indexed", first_char);
-        parse_field_indexed(payload, &pos);
-    }
 
+#pragma unroll
+    for (int i = 0; i < 3; i++) {
+        __u8 first_char = payload[pos];
+
+        log_debug("[http2] first char %d", first_char);
+        if ((first_char&128) != 0) {
+            log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
+            parse_field_indexed(payload, &pos);
+//        } if ((first_char&192) == 64) {
+//            log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
+//            parse_field_literal(payload, &pos);
+        }
+    }
 }
 
 // This function reads the http2 headers frame.
@@ -111,6 +122,8 @@ static __always_inline bool decode_http2_headers_frame(const char *payload, size
     if (payload == NULL) {
         return false;
     }
+
+    log_debug("http2 decode_http2_headers_frame");
 
     // TODO: Add a loop until we reach the given payload size
     parse_header_field_repr(payload);
@@ -120,9 +133,11 @@ static __always_inline bool decode_http2_headers_frame(const char *payload, size
 
 // This function filters the needed frames from the http2 session.
 static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t pos) {
+    log_debug("http2 process_http2_frames");
+
     struct http2_frame current_frame = {};
     char buf[HTTP2_FRAME_HEADER_SIZE];
-    char payload[100];
+    char payload[10];
 
 #pragma unroll
     // Iterate till max frames to avoid high connection rate.
@@ -147,9 +162,15 @@ static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t p
             continue;
         }
 
-        bpf_skb_load_bytes(skb, pos, payload, 100);
+        if (pos + 10 > skb->len) {
+          return;
+        }
+
+        // 1. Verify size for reading (compare max of XX and current_frame.length)
+        // 2. Iterate if needed
+        bpf_skb_load_bytes(skb, pos, payload, 10);
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (!decode_http2_headers_frame(payload, 100)){
+        if (!decode_http2_headers_frame(payload, 10)){
             log_debug("unable to read http2 header frame");
             break;
         }
