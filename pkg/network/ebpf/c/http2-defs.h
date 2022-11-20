@@ -7,7 +7,11 @@
 
 // A limit of max frames we will upload from a single connection to the user mode.
 // NOTE: we may need to revisit this const if we need to capture more connections.
-#define HTTP2_MAX_FRAMES 40
+#define HTTP2_MAX_FRAMES 10
+
+// A limit of max frame size in order to be able to load a max size and pass the varifier.
+// NOTE: we may need to change the max size.
+#define HTTP2_MAX_FRAME_LEN 100
 
 // All types of http2 frames exist in the protocol.
 // Checkout https://datatracker.ietf.org/doc/html/rfc7540 under "Frame Type Registry" section.
@@ -62,6 +66,11 @@ typedef struct {
     header_key name;
     header_value value;
 } static_table_value;
+
+typedef struct {
+    header_key name;
+    header_value value;
+} dynamic_table_value;
 
 #define MAX_STATIC_TABLE_INDEX 64
 
