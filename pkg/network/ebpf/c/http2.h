@@ -163,21 +163,15 @@ static __always_inline void parse_field_indexed(const char *payload, size_t *pos
 
 static __always_inline void parse_header_field_repr(const char *payload, size_t payload_size, __u8 first_char,size_t *pos) {
     log_debug("http2 parse_header_field_repr is in");
-//    volatile size_t pos = 0; // understand ?!
-//
-//#pragma unroll
-//    for (int i = 0; i < 4; i++) {
-//        __u8 first_char = payload[pos];
+    log_debug("[http2] first char %d", first_char);
 
-        log_debug("[http2] first char %d", first_char);
-        if ((first_char&128) != 0) {
-            log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
-            parse_field_indexed(payload, pos);
-        } if ((first_char&192) == 64) {
-            log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_literal", pos, first_char);
-            parse_field_literal(payload, pos, true, payload_size);
-        }
-//    }
+    if ((first_char&128) != 0) {
+        log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
+        parse_field_indexed(payload, pos);
+    } if ((first_char&192) == 64) {
+        log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_literal", pos, first_char);
+        parse_field_literal(payload, pos, true, payload_size);
+    }
 }
 
 // This function reads the http2 headers frame.
@@ -188,14 +182,13 @@ static __always_inline bool decode_http2_headers_frame(const char *payload, size
         return false;
     }
 
-    volatile size_t pos = 0; // understand ?!
+    size_t pos = 0; // understand ?!
 
 #pragma unroll
     for (int i = 0; i < 4; i++) {
         __u8 first_char = payload[pos];
         parse_header_field_repr(payload, payload_size, first_char, (size_t*)&pos);
-        }
-    // TODO: Add a loop until we reach the given payload size
+    }
 
     return true;
 }
