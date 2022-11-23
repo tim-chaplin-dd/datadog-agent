@@ -342,16 +342,29 @@ end
 
 
 def read_conf_file
-    conf_path = ""
-    if os == :windows
-      conf_path = "#{ENV['ProgramData']}\\Datadog\\datadog.yaml"
-    else
-      conf_path = '/etc/datadog-agent/datadog.yaml'
-    end
-    puts "cp is #{conf_path}"
-    f = File.read(conf_path)
-    confYaml = YAML.load(f)
-    confYaml
+  conf_path = ""
+  if os == :windows
+    conf_path = "#{ENV['ProgramData']}\\Datadog\\datadog.yaml"
+  else
+    conf_path = '/etc/datadog-agent/datadog.yaml'
+  end
+  f = File.read(conf_path)
+  confYaml = YAML.load(f)
+  confYaml
+end
+
+def write_conf_file(conf_path, data)
+  file = Tempfile.new(File.basename(conf_path))
+  begin
+    file.write(data)
+    system "sudo cp #{file.path} #{conf_path}"
+    system "sudo chown :dd-agent #{conf_path}"
+    system "sudo chmod 644 #{conf_path}"
+    system "sudo chmod +x #{File.dirname(conf_path)}"
+  ensure
+    file.close
+    file.unlink
+  end
 end
 
 def fetch_python_version(timeout = 15)
@@ -583,7 +596,7 @@ shared_examples_for "a running Agent with APM manually disabled" do
       confYaml["apm_config"] = {}
     end
     confYaml["apm_config"]["enabled"] = false
-    File.write(conf_path, confYaml.to_yaml)
+    write_conf_file(conf_path, confYaml.to_yaml)
 
     output = restart "datadog-agent"
     if os != :windows
@@ -666,7 +679,7 @@ shared_examples_for 'an Agent with python3 enabled' do
     f = File.read(conf_path)
     confYaml = YAML.load(f)
     confYaml["python_version"] = 3
-    File.write(conf_path, confYaml.to_yaml)
+    write_conf_file(conf_path, confYaml.to_yaml)
 
     output = restart "datadog-agent"
     expect(output).to be_truthy
@@ -692,7 +705,7 @@ shared_examples_for 'an Agent with python3 enabled' do
     f = File.read(conf_path)
     confYaml = YAML.load(f)
     confYaml["python_version"] = 2
-    File.write(conf_path, confYaml.to_yaml)
+    write_conf_file(conf_path, confYaml.to_yaml)
 
     output = restart "datadog-agent"
     expect(output).to be_truthy
@@ -721,7 +734,7 @@ shared_examples_for 'an Agent with integrations' do
   before do
     freeze_content = File.read(integrations_freeze_file)
     freeze_content.gsub!(/datadog-cilium==.*/, 'datadog-cilium==2.2.1')
-    File.write(integrations_freeze_file, freeze_content)
+    write_conf_file(integrations_freeze_file, freeze_content)
 
     integration_remove('datadog-cilium')
   end
