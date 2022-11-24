@@ -356,10 +356,15 @@ end
 def write_conf_file(conf_path, data)
   file = Tempfile.new(File.basename(conf_path))
   begin
+    print "writing #{data} to #{file.path}"
     file.write(data)
+    print "sudo cp #{file.path} #{conf_path}"
     system "sudo cp #{file.path} #{conf_path}"
+    print "sudo chown :dd-agent #{conf_path}"
     system "sudo chown :dd-agent #{conf_path}"
+    print "sudo chmod 644 #{conf_path}"
     system "sudo chmod 644 #{conf_path}"
+    print "sudo chmod +x #{File.dirname(conf_path)}"
     system "sudo chmod +x #{File.dirname(conf_path)}"
   ensure
     file.close
