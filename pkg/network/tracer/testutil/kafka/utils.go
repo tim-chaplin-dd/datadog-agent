@@ -96,7 +96,7 @@ func PullKafkaDockers() error {
 		"KAFKA_ADDR=127.0.0.1",
 		"KAFKA_PORT=9092",
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker-compose", "-f", dir+"/testdata/docker-compose.yml", "pull")
 	cmd.Env = append(cmd.Env, envs...)
@@ -111,6 +111,8 @@ func RunKafkaServers(t *testing.T, serverAddr string) {
 	}
 	dir, _ := CurDir()
 	cmd := exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "up")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stdout
 	cmd.Env = append(cmd.Env, envs...)
 	go func() {
 		if err := cmd.Run(); err != nil {
@@ -125,7 +127,7 @@ func RunKafkaServers(t *testing.T, serverAddr string) {
 		c.Env = append(c.Env, envs...)
 		_ = c.Run()
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	require.NoError(t, waitForKafka(ctx, fmt.Sprintf("%s:9092", serverAddr)))
 	cancel()
 }

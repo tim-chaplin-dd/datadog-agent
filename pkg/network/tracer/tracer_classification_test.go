@@ -239,7 +239,6 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 			name: "kafka - produce",
 			clientRun: func(t *testing.T, serverAddr string) {
 				client := kafka.NewClient(clientHost, serverAddr)
-				//require.NoError(t, client.CreateTopic("test"))
 				messages := [][]byte{[]byte("msg1"), []byte("msg2")}
 				require.NoError(t, client.Produce("test", messages...))
 				fetchMessages, err := client.Fetch("test")
