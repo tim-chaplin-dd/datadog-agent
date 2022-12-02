@@ -40,15 +40,13 @@ static __always_inline void update_conn_state(conn_tuple_t *t, conn_stats_ts_t *
 }
 
 static __always_inline protocol_t get_protocol(conn_tuple_t *t) {
+    protocol_t *cached_protocol_ptr = NULL;
+
     conn_tuple_t conn_tuple_copy = *t;
     // The classifier is a socket filter and there we are not accessible for pid and netns.
     // The key is based of the source & dest addresses and ports, and the metadata.
     conn_tuple_copy.netns = 0;
     conn_tuple_copy.pid = 0;
-    protocol_t *cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &conn_tuple_copy);
-    if (cached_protocol_ptr != NULL) {
-       return *cached_protocol_ptr;
-    }
 
     conn_tuple_t *cached_skb_conn_tup_ptr = bpf_map_lookup_elem(&conn_tuple_to_socket_skb_conn_tuple, &conn_tuple_copy);
     if (cached_skb_conn_tup_ptr != NULL) {
@@ -59,11 +57,12 @@ static __always_inline protocol_t get_protocol(conn_tuple_t *t) {
         }
     }
 
-    flip_tuple(&conn_tuple_copy);
     cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &conn_tuple_copy);
     if (cached_protocol_ptr != NULL) {
        return *cached_protocol_ptr;
     }
+
+    flip_tuple(&conn_tuple_copy);
 
     cached_skb_conn_tup_ptr = bpf_map_lookup_elem(&conn_tuple_to_socket_skb_conn_tuple, &conn_tuple_copy);
     if (cached_skb_conn_tup_ptr != NULL) {
@@ -72,6 +71,11 @@ static __always_inline protocol_t get_protocol(conn_tuple_t *t) {
         if (cached_protocol_ptr != NULL) {
            return *cached_protocol_ptr;
         }
+    }
+
+    cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &conn_tuple_copy);
+    if (cached_protocol_ptr != NULL) {
+       return *cached_protocol_ptr;
     }
 
     return PROTOCOL_UNKNOWN;

@@ -31,6 +31,7 @@ static __always_inline void clean_protocol_classification(conn_tuple_t *tup) {
         inverse_skb_conn_tup.netns = 0;
         bpf_map_delete_elem(&connection_protocol, &inverse_skb_conn_tup);
         bpf_map_delete_elem(&connection_protocol, &skb_tup);
+        bpf_map_delete_elem(&skb_conn_tuple_to_socket_conn_tuple, &skb_tup);
     }
 
     bpf_map_delete_elem(&conn_tuple_to_socket_skb_conn_tuple, &conn_tuple);

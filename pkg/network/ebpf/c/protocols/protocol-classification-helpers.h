@@ -40,24 +40,53 @@ static __always_inline bool is_kafka(const char* buf, __u32 buf_size) {
     const int32_t message_size = read_big_endian_int32(buf);
     size_t offset = sizeof(message_size);
 
-    if (message_size < 0) {
+    if (message_size <= 0) {
         return false;
     }
 
     const int16_t request_api_key = read_big_endian_int16(buf + offset);
     offset += sizeof(request_api_key);
-    if (request_api_key < 0 || request_api_key > KAFKA_MAX_VERSION) {
+    if (request_api_key != 0 && request_api_key != 1) {
         return false;
     }
 
     const int16_t request_api_version = read_big_endian_int16(buf + offset);
     offset += sizeof(request_api_version);
-    if (request_api_version < 0 || request_api_version > KAFKA_MAX_API) {
+    if (request_api_version < 0) {
         return false;
     }
 
+    if (request_api_key == 0) {
+        if (message_size < KAFKA_MIN_SIZE + 6) {
+            return false;
+        }
+        if (request_api_version > 9) {
+            return false;
+        }
+    }
+    if (request_api_key == 1) {
+        if (message_size < KAFKA_MIN_SIZE + 12) {
+            return false;
+        }
+        if (request_api_version > 13) {
+            return false;
+        }
+    }
+
     const int32_t correlation_id = read_big_endian_int32(buf + offset);
+    log_debug("guy_ %d %d", message_size, correlation_id);
+    log_debug("guy$ %d %d", request_api_key, request_api_version);
     return correlation_id > 0;
+}
+
+static __always_inline bool is_http2_server_settings(const char* buf, __u32 buf_size) {
+    CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, buf_size, HTTP2_MARKER_SIZE)
+
+#define HTTP2_SIGNATURE "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+    bool match = !bpf_memcmp(buf, HTTP2_SIGNATURE, sizeof(HTTP2_SIGNATURE)-1);
+
+    return match;
 }
 
 // The method checks if the given buffer starts with the HTTP2 marker as defined in https://datatracker.ietf.org/doc/html/rfc7540.
@@ -114,6 +143,8 @@ static __always_inline void classify_protocol(protocol_t *protocol, const char *
         *protocol = PROTOCOL_HTTP;
     } else if (is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
+    } else if (is_http2_server_settings(buf, size)) {
+        // intentional
     } else if (is_kafka(buf, size)) {
         *protocol = PROTOCOL_KAFKA;
     } else {
@@ -193,6 +224,48 @@ static __always_inline void read_into_buffer_for_classification(char *buffer, st
     }
 }
 
+static __always_inline protocol_t get_protocol_2(struct __sk_buff *skb, conn_tuple_t *skb_tup_ptr) {
+    conn_tuple_t skb_tup = *skb_tup_ptr;
+    // The classifier is a socket filter and there we are not accessible for pid and netns.
+    // The key is based of the source & dest addresses and ports, and the metadata.
+    protocol_t *cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &skb_tup);
+    if (cached_protocol_ptr != NULL) {
+        log_debug("guy %p get_protocol_2 found from 1; %d", skb, *cached_protocol_ptr);
+        return *cached_protocol_ptr;
+    }
+
+    conn_tuple_t *cached_socket_conn_tup_ptr = bpf_map_lookup_elem(&skb_conn_tuple_to_socket_conn_tuple, &skb_tup);
+
+    flip_tuple(&skb_tup);
+    cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &skb_tup);
+    if (cached_protocol_ptr != NULL) {
+        log_debug("guy %p get_protocol_2 found from 2; %d", skb, *cached_protocol_ptr);
+        return *cached_protocol_ptr;
+    }
+
+    if (cached_socket_conn_tup_ptr != NULL) {
+        conn_tuple_t socket_conn_tuple = *cached_socket_conn_tup_ptr;
+        cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &socket_conn_tuple);
+        if (cached_protocol_ptr != NULL) {
+            log_debug("guy %p get_protocol_2 found from 3; %d", skb, *cached_protocol_ptr);
+            return *cached_protocol_ptr;
+        }
+    }
+
+    cached_socket_conn_tup_ptr = bpf_map_lookup_elem(&skb_conn_tuple_to_socket_conn_tuple, &skb_tup);
+    if (cached_socket_conn_tup_ptr != NULL) {
+        conn_tuple_t socket_conn_tuple = *cached_socket_conn_tup_ptr;
+        cached_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &socket_conn_tuple);
+        if (cached_protocol_ptr != NULL) {
+            log_debug("guy %p get_protocol_2 found from 4; %d", skb, *cached_protocol_ptr);
+            return *cached_protocol_ptr;
+        }
+    }
+
+    log_debug("guy %p get_protocol_2 not found", skb);
+    return PROTOCOL_UNKNOWN;
+}
+
 // A shared implementation for the runtime & prebuilt socket filter that classifies the protocols of the connections.
 static __always_inline void protocol_classifier_entrypoint(struct __sk_buff *skb) {
     skb_info_t skb_info = {0};
@@ -208,24 +281,25 @@ static __always_inline void protocol_classifier_entrypoint(struct __sk_buff *skb
         return;
     }
 
-    protocol_t *cur_fragment_protocol_ptr = bpf_map_lookup_elem(&connection_protocol, &skb_tup);
-    if (cur_fragment_protocol_ptr) {
+    protocol_t cur_fragment_protocol = get_protocol_2(skb, &skb_tup);
+    if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
         return;
     }
 
-    protocol_t cur_fragment_protocol = PROTOCOL_UNKNOWN;
     char request_fragment[CLASSIFICATION_MAX_BUFFER];
     bpf_memset(request_fragment, 0, sizeof(request_fragment));
     read_into_buffer_for_classification((char *)request_fragment, skb, &skb_info);
     const size_t payload_length = skb->len - skb_info.data_off;
-    const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
-    classify_protocol(&cur_fragment_protocol, request_fragment, final_fragment_size);
+    classify_protocol(&cur_fragment_protocol, request_fragment, payload_length);
     // If there has been a change in the classification, save the new protocol.
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
+        log_debug("guy classifying %p as %d", skb, cur_fragment_protocol);
         bpf_map_update_with_telemetry(connection_protocol, &skb_tup, &cur_fragment_protocol, BPF_NOEXIST);
-        conn_tuple_t inverse_skb_conn_tup = skb_tup;
-        flip_tuple(&inverse_skb_conn_tup);
-        bpf_map_update_with_telemetry(connection_protocol, &inverse_skb_conn_tup, &cur_fragment_protocol, BPF_NOEXIST);
+        conn_tuple_t *cached_socket_conn_tup_ptr = bpf_map_lookup_elem(&skb_conn_tuple_to_socket_conn_tuple, &skb_tup);
+        if (cached_socket_conn_tup_ptr != NULL) {
+            conn_tuple_t socket_conn_tuple = *cached_socket_conn_tup_ptr;
+            bpf_map_update_with_telemetry(connection_protocol, &socket_conn_tuple, &cur_fragment_protocol, BPF_NOEXIST);
+        }
     }
 }
 

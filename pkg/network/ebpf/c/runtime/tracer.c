@@ -799,6 +799,7 @@ int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx* ctx) {
 
     if (!is_equal(&skb_tup, &sock_tup)) {
         bpf_map_update_with_telemetry(conn_tuple_to_socket_skb_conn_tuple, &sock_tup, &skb_tup, BPF_NOEXIST);
+        bpf_map_update_with_telemetry(skb_conn_tuple_to_socket_conn_tuple, &skb_tup, &sock_tup, BPF_NOEXIST);
     }
 
     return 0;

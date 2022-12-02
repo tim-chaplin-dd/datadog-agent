@@ -22,7 +22,7 @@ import (
 
 func tryConnectingKafka(addr string) bool {
 	dialer := &kafka.Dialer{
-		Timeout: 10 * time.Second,
+		Timeout: time.Second,
 	}
 	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
@@ -34,13 +34,13 @@ func tryConnectingKafka(addr string) bool {
 	return err == nil
 }
 
-func waitForKafka(ctx context.Context, zookeeperAddr string) error {
+func waitForKafka(ctx context.Context, kafkaAddr string) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if tryConnectingKafka(zookeeperAddr) {
+			if tryConnectingKafka(kafkaAddr) {
 				return nil
 			}
 			time.Sleep(time.Second)
