@@ -8,6 +8,7 @@
 #include "bpf_builtins.h"
 #include "bpf_telemetry.h"
 #include "ip.h"
+#include "http2.h"
 
 // Patch to support old kernels that don't contain bpf_skb_load_bytes, by adding a dummy implementation to bypass runtime compilation.
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
@@ -80,13 +81,14 @@ static __always_inline bool is_kafka(const char* buf, __u32 buf_size) {
 }
 
 static __always_inline bool is_http2_server_settings(const char* buf, __u32 buf_size) {
-    CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, buf_size, HTTP2_MARKER_SIZE)
+    CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, buf_size, 15)
 
-#define HTTP2_SIGNATURE "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+    struct http2_frame frame_header;
+    if (!read_http2_frame_header(buf, buf_size, &frame_header)) {
+        return false;
+    }
 
-    bool match = !bpf_memcmp(buf, HTTP2_SIGNATURE, sizeof(HTTP2_SIGNATURE)-1);
-
-    return match;
+    return frame_header.type == kSettingsFrame && frame_header.stream_id == 0 && frame_header.length == 6;
 }
 
 // The method checks if the given buffer starts with the HTTP2 marker as defined in https://datatracker.ietf.org/doc/html/rfc7540.
@@ -144,7 +146,7 @@ static __always_inline void classify_protocol(protocol_t *protocol, const char *
     } else if (is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
     } else if (is_http2_server_settings(buf, size)) {
-        // intentional
+        *protocol = PROTOCOL_HTTP2;
     } else if (is_kafka(buf, size)) {
         *protocol = PROTOCOL_KAFKA;
     } else {
