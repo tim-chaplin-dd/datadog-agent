@@ -58,7 +58,7 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 		},
 	}
 
-	pullTestDockers()
+	//pullTestDockers()
 
 	tests := []struct {
 		name       string
@@ -222,30 +222,30 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 			},
 			want: network.ProtocolHTTP,
 		},
-		//{
-		//	name: "kafka - produce",
-		//	clientRun: func(t *testing.T, serverAddr string) {
-		//		client := kafka.NewClient(clientHost, serverAddr)
-		//		messages := [][]byte{[]byte("msg1"), []byte("msg2")}
-		//		require.NoError(t, client.Produce("test", messages...))
-		//		fetchMessages, err := client.Fetch("test")
-		//		require.NoError(t, err)
-		//		require.EqualValues(t, messages, fetchMessages)
-		//	},
-		//	serverRun: func(t *testing.T, serverAddr string, done chan struct{}) string {
-		//		serverHost, _, _ := net.SplitHostPort(serverAddr)
-		//		kafka.RunKafkaServers(t, serverHost)
-		//		return fmt.Sprintf("%s:9092", serverHost)
-		//	},
-		//	shouldSkip: func() (bool, string) {
-		//		if runtime.GOOS != "linux" {
-		//			return true, "Kafka tests supported on linux machine only"
-		//		}
-		//		errMsg, exists := skipDockerBasedTests["kafka"]
-		//		return exists, errMsg
-		//	},
-		//	want: network.ProtocolKafka,
-		//},
+		{
+			name: "kafka - produce",
+			clientRun: func(t *testing.T, serverAddr string) {
+				client := kafka.NewClient(clientHost, serverAddr)
+				messages := [][]byte{[]byte("msg1"), []byte("msg2")}
+				require.NoError(t, client.Produce("test", messages...))
+				fetchMessages, err := client.Fetch("test")
+				require.NoError(t, err)
+				require.EqualValues(t, messages, fetchMessages)
+			},
+			serverRun: func(t *testing.T, serverAddr string, done chan struct{}) string {
+				serverHost, _, _ := net.SplitHostPort(serverAddr)
+				kafka.RunKafkaServers(t, serverHost)
+				return fmt.Sprintf("%s:9092", serverHost)
+			},
+			shouldSkip: func() (bool, string) {
+				if runtime.GOOS != "linux" {
+					return true, "Kafka tests supported on linux machine only"
+				}
+				errMsg, exists := skipDockerBasedTests["kafka"]
+				return exists, errMsg
+			},
+			want: network.ProtocolKafka,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
