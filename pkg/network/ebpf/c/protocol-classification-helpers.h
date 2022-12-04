@@ -44,6 +44,17 @@ static __always_inline bool http2_marker_suffix(const char* buf) {
     return match;
 }
 
+//// The method checks if the given buffer includes the suffix of the HTTP2 marker as defined in https://datatracker.ietf.org/doc/html/rfc7540.
+//static __always_inline void print_full_buffer(const char* buf) {
+//    log_debug("[http2] -------------------1 buf is %d %d %d", buf[25], buf[26], buf[27]);
+//    log_debug("[http2] -------------------2 buf is %d %d %d", buf[28], buf[29], buf[30]);
+//    log_debug("[http2] -------------------3 buf is %d %d %d", buf[31], buf[32], buf[33]);
+//    log_debug("[http2] -------------------4 buf is %d %d %d", buf[34], buf[35], buf[36]);
+//    log_debug("[http2] -------------------5 buf is %d %d %d", buf[37], buf[38], buf[39]);
+//    log_debug("[http2] -------------------6 buf is %d %d %d", buf[40], buf[41], buf[42]);
+//    log_debug("[http2] -------------------7 buf is %d %d %d", buf[43], buf[44], buf[45]);
+//}
+
 // The method checks if the given buffer starts with the HTTP2 marker as defined in https://datatracker.ietf.org/doc/html/rfc7540.
 // We check that the given buffer is not empty and its size is at least 24 bytes.
 static __always_inline bool is_http2(const char* buf, __u32 buf_size) {
