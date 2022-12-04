@@ -59,23 +59,33 @@ int socket__http_filter(struct __sk_buff* skb) {
 SEC("socket/http2_filter")
 int socket__http2_filter(struct __sk_buff *skb) {
     skb_info_t skb_info;
-    conn_tuple_t conn_tup;
+    http2_transaction_t http;
+    bpf_memset(&http, 0, sizeof(http));
 
-    if (!read_conn_tuple_skb(skb, &skb_info, &conn_tup)) {
-        return 0;
+    if (!read_conn_tuple_skb(skb, &skb_info, &http.tup)) {
+            return 0;
     }
-    size_t pos = skb_info.data_off;
+//     size_t pos = skb_info.data_off;
+
+    // src_port represents the source port number *before* normalization
+    // for more context please refer to http-types.h comment on `owned_by_src_port` field
+    http.owned_by_src_port = http.tup.sport;
+    normalize_tuple(&http.tup);
+
+    read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
+
 
     // Load the first HTTP2_FRAME_HEADER_SIZE into a buffer.
-    char buf[HTTP2_FRAME_HEADER_SIZE];
-    bpf_skb_load_bytes(skb, skb_info.data_off, buf, HTTP2_FRAME_HEADER_SIZE);
+//    char buf[HTTP2_FRAME_HEADER_SIZE];
+//    bpf_skb_load_bytes(skb, skb_info.data_off, buf, HTTP2_FRAME_HEADER_SIZE);
 
     // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) prefix
-    if (http2_marker_prefix(buf)) {
-        char marker_buf[HTTP2_MARKER_SIZE-HTTP2_FRAME_HEADER_SIZE];
-        bpf_skb_load_bytes(skb, skb_info.data_off + HTTP2_FRAME_HEADER_SIZE, marker_buf, HTTP2_MARKER_SIZE-HTTP2_FRAME_HEADER_SIZE);
+    if (http2_marker_prefix(http.request_fragment)) {
+//        char marker_buf[HTTP2_MARKER_SIZE-HTTP2_FRAME_HEADER_SIZE];
+//        bpf_skb_load_bytes(skb, skb_info.data_off + HTTP2_FRAME_HEADER_SIZE, marker_buf, HTTP2_MARKER_SIZE-HTTP2_FRAME_HEADER_SIZE);
         // Validate that the extra 15 bytes after the prefix is the suffix of the magic.
-        if (http2_marker_suffix(marker_buf)) {
+        http.current_offset_in_request_fragment += 9;
+        if (http2_marker_suffix(http.request_fragment + http.current_offset_in_request_fragment)) {
             log_debug("http2 magic was found");
         }
         // Validate that there are more frames after the magic.
@@ -84,10 +94,11 @@ int socket__http2_filter(struct __sk_buff *skb) {
         }
 
         // Update the position to be after the magic.
-        pos += HTTP2_MARKER_SIZE;
+//        pos += HTTP2_MARKER_SIZE;
+        http.current_offset_in_request_fragment += 15;
     }
 
-    process_http2_frames(skb, pos);
+    process_http2_frames(&http, skb);
     return 0;
 }
 

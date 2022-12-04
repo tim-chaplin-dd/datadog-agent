@@ -29,6 +29,7 @@ static __always_inline void read_into_buffer(char *buffer, char *data, size_t da
 
 // This function is used for the socket-filter HTTP monitoring
 static __always_inline void read_into_buffer_skb(char *buffer, struct __sk_buff *skb, skb_info_t *info) {
+//HTTP2_MAX_FRAME_LEN
     u64 offset = (u64)info->data_off;
 
 #define BLK_SIZE (16)

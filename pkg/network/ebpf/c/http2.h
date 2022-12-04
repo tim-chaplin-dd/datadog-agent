@@ -5,6 +5,7 @@
 #include "bpf_helpers.h"
 #include "map-defs.h"
 #include "http2-defs.h"
+#include "http-types.h"
 
 BPF_HASH_MAP(http2_static_table, u64, static_table_value, 20)
 
@@ -58,26 +59,30 @@ static __always_inline bool read_http2_frame_header(const char *buf, size_t buf_
 //
 // The returned remain buffer is either a smaller suffix of p, or err != nil.
 // The error is errNeedMore if p doesn't contain a complete integer.
-static __always_inline bool read_var_int(const char *payload, size_t *pos, char n, __u64 *out_index){
+
+
+static __always_inline __u64 read_var_int(http2_transaction_t* http2_transaction, char n){
     if (n < 1 || n > 8) {
-        return false;
+        return -1;
     }
 
-    __u8 bla = payload[*pos];
-    __u64 index = (__u64)(bla);
+    if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+            return false;
+    }
+
+    __u64 index = (__u64)(*(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment));
     __u64 n2 = n;
     if (n < 8) {
         index &= (1 << n2) - 1;
     }
 
     if (index < (1 << n2) - 1) {
-        *pos += 1;
-        *out_index = index;
-        return true;
+        http2_transaction->current_offset_in_request_fragment += 1;
+        return index;
     }
 
     // TODO: compare with original code.
-    return false;
+    return -1;
 }
 
 
@@ -89,88 +94,87 @@ static __always_inline bool read_var_int(const char *payload, size_t *pos, char 
 // strings past the MAX_HEADER_LIST_SIZE are ignored, but the server
 // is returning an error anyway, and because they're not indexed, the error
 // won't affect the decoding state.
-static __always_inline bool read_string(const char *payload, size_t *pos, char n, size_t payload_size, __u64 *out_str_len){
-    bool is_huff = false;
-    if ((payload[*pos]&128) != 0) {
-        is_huff = true;
-    }
-    __u64 str_len = 0;
-    if (!read_var_int(payload, pos, 7, &str_len)) {
-        return false;
-    }
-    log_debug("[slavin] the string len is %llu, pos is now %d", str_len, *pos);
-    if (str_len >= payload_size) {
-        return false;
-    }
-
-    volatile size_t final_string_size = HTTP2_MAX_FRAME_LEN;
-    if (str_len < final_string_size) {
-        final_string_size = str_len;
-    }
-//    final_string_size = final_string_size % (HTTP2_MAX_FRAME_LEN +1);
-//    if (final_string_size > 0) {
-//        log_debug("[slavin] http2 final_string_size is %d", final_string_size);
+//static __always_inline bool read_string(const char *payload, __u32 current_offset_in_request_fragment, char n, size_t payload_size, __u64 *out_str_len){
+//    bool is_huff = false;
+//    if ((payload[*pos]&128) != 0) {
+//        is_huff = true;
 //    }
+//    __u64 str_len = 0;
+//    if (!read_var_int(payload, current_offset_in_request_fragment, 7, &str_len)) {
+//        return false;
+//    }
+//    log_debug("[slavin] the string len is %llu, pos is now %d", str_len, *pos);
+//    if (str_len >= payload_size) {
+//        return false;
+//    }
+//
+//    volatile size_t final_string_size = HTTP2_MAX_FRAME_LEN;
+//    if (str_len < final_string_size) {
+//        final_string_size = str_len;
+//    }
+////    final_string_size = final_string_size % (HTTP2_MAX_FRAME_LEN +1);
+////    if (final_string_size > 0) {
+////        log_debug("[slavin] http2 final_string_size is %d", final_string_size);
+////    }
+//
+//    char full_string[21];
+//    bpf_probe_read_kernel(full_string, 21, (void*)(payload + *pos));
+//
+//    log_debug("[http2] -------------------1 buf is %d %d %d", full_string[0], full_string[1], full_string[2]);
+////    log_debug("[http2] -------------------2 buf is %d %d %d", full_string[3], full_string[4], full_string[5]);
+////    log_debug("[http2] -------------------3 buf is %d %d %d", full_string[6], full_string[7], full_string[8]);
+////    log_debug("[http2] -------------------4 buf is %d %d %d", full_string[9], full_string[10], full_string[11]);
+////    log_debug("[http2] -------------------5 buf is %d %d %d", full_string[12], full_string[13], full_string[14]);
+////    log_debug("[http2] -------------------6 buf is %d %d %d", full_string[15], full_string[16], full_string[17]);
+////    log_debug("[http2] -------------------7 buf is %d %d %d", full_string[18], full_string[19], full_string[20]);
+//
+//    *out_str_len = str_len;
+//    return true;
+//}
 
-    char full_string[21];
-    bpf_probe_read_kernel(full_string, 21, (void*)(payload + *pos));
+static __always_inline void parse_field_literal(http2_transaction_t* http2_transaction, bool index_type, size_t payload_size){
+        log_debug("[http2] parse_field_literal in");
 
-    log_debug("[http2] -------------------1 buf is %d %d %d", full_string[0], full_string[1], full_string[2]);
-//    log_debug("[http2] -------------------2 buf is %d %d %d", full_string[3], full_string[4], full_string[5]);
-//    log_debug("[http2] -------------------3 buf is %d %d %d", full_string[6], full_string[7], full_string[8]);
-//    log_debug("[http2] -------------------4 buf is %d %d %d", full_string[9], full_string[10], full_string[11]);
-//    log_debug("[http2] -------------------5 buf is %d %d %d", full_string[12], full_string[13], full_string[14]);
-//    log_debug("[http2] -------------------6 buf is %d %d %d", full_string[15], full_string[16], full_string[17]);
-//    log_debug("[http2] -------------------7 buf is %d %d %d", full_string[18], full_string[19], full_string[20]);
-
-    *out_str_len = str_len;
-    return true;
+     __u64 index = read_var_int(http2_transaction, 6);
+    if (index) {
+        log_debug("[http2] the index is parse_field_indexed %llu", index);
+    }
+//
+//        dynamic_table_value dynamic_value = {};
+//        static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
+//        if (static_value != NULL) {
+//            if (index_type){
+//                dynamic_value.name = static_value->name;
+//                log_debug("[http2] the dynamic name is %d", dynamic_value.name);
+//                __u64 str_len = 0;
+//                bool ok = read_string(payload, pos, 6, payload_size, &str_len);
+//                if (!ok && str_len <= 0){
+//                    return;
+//                }
+//                pos += str_len;
+//            }
+//        } else {
+//            log_debug("[http2] value is null");
+//        }
+//    }
+//
+//    log_debug("[http2] the index is: %d in parse_field_literal", index);
+//
+//    static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
+//    if (static_value != NULL) {
+//        log_debug("[http2] the name is %d", static_value->name);
+//        log_debug("[http2] the value is %d", static_value->value);
+//    } else {
+//        log_debug("[http2] value is null");
+//    }
 }
 
-static __always_inline void parse_field_literal(const char *payload, size_t *pos, bool index_type, size_t payload_size){
-    __u64 index = 0;
-    bool ok = read_var_int(payload, pos, 6, &index);
-    if (!ok || index == 0)  {
-        return;
-    }
-    if (index > 0) {
-        log_debug("[http2] the index in parse_field_literal is %llu, pos is now %d", index, *pos);
+static __always_inline void parse_field_indexed(http2_transaction_t* http2_transaction){
+        log_debug("[http2] parse_field_indexed in");
 
-        dynamic_table_value dynamic_value = {};
-        static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
-        if (static_value != NULL) {
-            if (index_type){
-                dynamic_value.name = static_value->name;
-                log_debug("[http2] the dynamic name is %d", dynamic_value.name);
-                __u64 str_len = 0;
-                bool ok = read_string(payload, pos, 6, payload_size, &str_len);
-                if (!ok && str_len <= 0){
-                    return;
-                }
-                pos += str_len;
-            }
-        } else {
-            log_debug("[http2] value is null");
-        }
-    }
-
-    log_debug("[http2] the index is: %d in parse_field_literal", index);
-
-    static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
-    if (static_value != NULL) {
-        log_debug("[http2] the name is %d", static_value->name);
-        log_debug("[http2] the value is %d", static_value->value);
-    } else {
-        log_debug("[http2] value is null");
-    }
-}
-
-static __always_inline void parse_field_indexed(const char *payload, size_t *pos){
-    __u64 index = 0;
-    bool ok = read_var_int(payload, pos, 7, &index);
-    if (!ok || index == 0) {
-        log_debug("[http2] the index is parse_field_indexed %llu, pos is now %d", index, *pos);
-        return;
+     __u64 index = read_var_int(http2_transaction, 7);
+    if (index) {
+        log_debug("[http2] the index is parse_field_indexed %llu", index);
     }
 
     static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
@@ -180,73 +184,70 @@ static __always_inline void parse_field_indexed(const char *payload, size_t *pos
     } else {
         log_debug("[http2] value is null");
     }
+
 }
 
-static __always_inline void parse_header_field_repr(const char *payload, size_t payload_size, __u8 first_char,size_t *pos) {
+static __always_inline void parse_header_field_repr(http2_transaction_t* http2_transaction, size_t payload_size, __u8 first_char) {
     log_debug("http2 parse_header_field_repr is in");
     log_debug("[http2] first char %d", first_char);
 
     if ((first_char&128) != 0) {
-        log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_indexed", pos, first_char);
-        parse_field_indexed(payload, pos);
-    } if ((first_char&192) == 64) {
-        log_debug("[http2] pos is %d first char %d & 128 != 0; calling parse_field_literal", pos, first_char);
-        parse_field_literal(payload, pos, true, payload_size);
+        log_debug("[http2]first char %d & 128 != 0; calling parse_field_indexed", first_char);
+        parse_field_indexed(http2_transaction);
+        }
+    if ((first_char&192) == 64) {
+        log_debug("[http2] first char %d & 128 != 0; calling parse_field_literal", first_char);
+        parse_field_literal(http2_transaction, true, payload_size);
     }
 }
 
 // This function reads the http2 headers frame.
-static __always_inline bool decode_http2_headers_frame(const char *payload, size_t payload_size) {
+static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http2_transaction, __u32 payload_size) {
     log_debug("[http2] decode_http2_headers_frame is in");
 
-    if (payload == NULL) {
-        return false;
-    }
-
-    size_t pos = 0;
-
-#pragma unroll
+//#pragma unroll
     for (int i = 0; i < 4; i++) {
-        // Validate the the position is still in the range of the payload size.
-        if (pos < payload_size) {
-            __u8 first_char = payload[pos];
-            parse_header_field_repr(payload, payload_size, first_char, (size_t*)&pos);
+        if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+                return false;
         }
+        __u8 first_char = *(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment);
+        //        log_debug("[http2] the first char is %d", first_char);
+        parse_header_field_repr(http2_transaction, payload_size, first_char);
     }
 
     return true;
 }
 
 // This function filters the needed frames from the http2 session.
-static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t pos) {
+static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, struct __sk_buff *skb) {
     log_debug("http2 process_http2_frames");
 
     struct http2_frame current_frame = {};
-    char buf[HTTP2_FRAME_HEADER_SIZE];
-    char payload[HTTP2_MAX_FRAME_LEN];
 
 #pragma unroll
     // Iterate till max frames to avoid high connection rate.
     for (uint32_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        if (pos + HTTP2_FRAME_HEADER_SIZE > skb->len) {
+        if (http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > skb->len) {
+        log_debug("[http2] size is too big!");
           return;
         }
 
-//        bpf_memset(&current_frame, 0, sizeof(struct http2_frame));
-        // Load the current HTTP2_FRAME_HEADER_SIZE into the buffer.
-        bpf_skb_load_bytes(skb, pos, buf, HTTP2_FRAME_HEADER_SIZE);
-        pos += HTTP2_FRAME_HEADER_SIZE;
-
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (!read_http2_frame_header(buf, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
-            log_debug("unable to read http2 frame header");
+        if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
             return;
         }
 
-//        // End of stream my apper in the data frame as well as the header frame.
-//        if (current_frame.type == kDataFrame && current_frame.flags == 1){
-//           log_debug("[http2] ********* End of stream flag was found!!! *********", current_frame.stream_id);
-//        }
+
+        if (!read_http2_frame_header(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+            return;
+        }
+
+        http2_transaction->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+
+        // End of stream my apper in the data frame as well as the header frame.
+        if (current_frame.type == kDataFrame && current_frame.flags == 1){
+           log_debug("[http2] ********* End of stream flag was found!!! *********", current_frame.stream_id);
+        }
 
         if (current_frame.length == 0) {
             continue;
@@ -254,35 +255,34 @@ static __always_inline void process_http2_frames(struct __sk_buff *skb, size_t p
 
         // Filter all types of frames except header frame.
         if (current_frame.type != kHeadersFrame) {
-            pos += (__u32)current_frame.length;
+            http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
             continue;
         }
 
-//        // End of stream my apper in the header frame as well.
-//        if (current_frame.flags == 1){
-//           log_debug("[http2] ********* End of stream flag was found!!! *********", current_frame.stream_id);
-//        }
+        // End of stream my apper in the header frame as well.
+        if (current_frame.flags == 1){
+           log_debug("[http2] ********* End of stream flag was found!!! *********", current_frame.stream_id);
+        }
 
         // Verify size of pos with max of XX not bigger then the packet.
-        if (pos + (__u32)current_frame.length > skb->len) {
+        if (http2_transaction->current_offset_in_request_fragment + (__u32)current_frame.length > skb->len) {
             return;
         }
 
-        // Verify size for reading max of XX not bigger then current_frame.length
+        log_debug("[http2] the current frame len is: %d", current_frame.length);
+        log_debug("[http2] the current frame flags is: %d", current_frame.flags);
+        log_debug("[http2] the current frame type is: %d", current_frame.type);
+        log_debug("[http2] the current frame place: %d", http2_transaction->current_offset_in_request_fragment);
 
-        // Choose the max size to load for payload which will not be bigger then the HTTP2_MAX_FRAME_LEN to pass the
-        // verifier.
-        log_debug("[http2] http2 the final size is %d", HTTP2_MAX_FRAME_LEN);
 
-        // 2. Iterate if needed
-        bpf_skb_load_bytes(skb, pos, payload, HTTP2_MAX_FRAME_LEN);
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (!decode_http2_headers_frame(payload, HTTP2_MAX_FRAME_LEN)){
-            log_debug("unable to read http2 header frame");
+        if (!decode_http2_headers_frame(http2_transaction, current_frame.length)){
+            log_debug("[http2] unable to read http2 header frame");
             return;
         }
-
-        pos += (__u32)current_frame.length;
+//
+//        pos += (__u32)current_frame.length;
+        http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
     }
 }
 
