@@ -171,11 +171,10 @@ if ['ubuntu', 'debian'].include?(node[:platform])
     package 'unattended-upgrades' do
       action :remove
     end
-  end
+end
 
-  if ['ubuntu', 'debian', 'centos'].include?(node[:platform])
+if ['ubuntu', 'debian', 'centos'].include?(node[:platform])
     package 'xfsprogs'
-  end
 end
 
 if ['amazon'].include?(node[:platform])
