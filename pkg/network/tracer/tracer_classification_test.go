@@ -30,13 +30,13 @@ var (
 	skipDockerBasedTests = map[string]string{}
 )
 
-func pullTestDockers() {
-	if runtime.GOOS == "linux" {
-		if err := kafka.PullKafkaDockers(); err != nil {
-			skipDockerBasedTests["kafka"] = fmt.Sprintf("skipping as we failed pulling the docker images due to: %s", err)
-		}
-	}
-}
+//func pullTestDockers() {
+//	if runtime.GOOS == "linux" {
+//		if err := kafka.PullKafkaDockers(); err != nil {
+//			skipDockerBasedTests["kafka"] = fmt.Sprintf("skipping as we failed pulling the docker images due to: %s", err)
+//		}
+//	}
+//}
 
 func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, targetHost, serverHost string) {
 	tr, err := NewTracer(cfg)
