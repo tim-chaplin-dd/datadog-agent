@@ -11,7 +11,6 @@ package tracer
 import (
 	"bufio"
 	"fmt"
-	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"golang.org/x/net/context"
 	"io"
 	"net"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/network"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
+	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/kafka"
 	"github.com/stretchr/testify/require"
 )

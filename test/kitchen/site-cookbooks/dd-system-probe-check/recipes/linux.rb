@@ -163,18 +163,22 @@ directory "/tmp/pkgjson" do
   recursive true
 end
 
-if ['oracle'].include?(node[:platform])
-    docker_installation_package 'default' do
-      action :create
-      setup_docker_repo false
-      package_name 'docker-engine'
-      package_options %q|-y|
-    end
+if ['ubuntu', 'debian'].include?(node[:platform])
+    apt_update
 
-    service 'docker' do
-      action [ :enable, :start ]
+    package 'gnupg'
+
+    package 'unattended-upgrades' do
+      action :remove
     end
-elsif ['amazon'].include?(node[:platform])
+  end
+
+  if ['ubuntu', 'debian', 'centos'].include?(node[:platform])
+    package 'xfsprogs'
+  end
+end
+
+if ['amazon'].include?(node[:platform])
     docker_installation_package 'default' do
       action :create
       setup_docker_repo false
@@ -198,9 +202,10 @@ else
 end
 
 execute 'install docker-compose' do
-  command <<-EOF
-    curl -SL https://github.com/docker/compose/releases/download/v2.12.2/docker-compose-$(uname -s | awk '{print tolower($0)}')-$(uname -m) -o /usr/bin/docker-compose
-    chmod 0755 /usr/bin/docker-compose
-  EOF
-  live_stream true
+    command <<-EOF
+        curl -SL https://github.com/docker/compose/releases/download/v2.12.2/docker-compose-$(uname -s | awk '{print tolower($0)}')-$(uname -m) -o /usr/bin/docker-compose
+        chmod 0755 /usr/bin/docker-compose
+    EOF
+    user "root"
+    live_stream true
 end
