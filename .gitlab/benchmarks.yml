@@ -1,0 +1,15 @@
+variables:
+  BENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/base-python3:focal  # Ubuntu 20.04 Focal
+
+benchmarks:
+  stage: benchmarks
+  when: manual
+  tags: ["team:apm-k8s-tweaked-metal-datadog-agent", "specific:true"]
+  image: $BENCHMARKS_CI_IMAGE
+  interruptible: true
+  timeout: 1h
+  script:
+    - echo "It works!"
+  variables:
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: datadog-agent
+    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
