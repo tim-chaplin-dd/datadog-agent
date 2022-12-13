@@ -118,9 +118,8 @@ func TestNetworkConnectionBatching(t *testing.T) {
 		cfg.MaxConnsPerMessage = tc.maxSize
 		ctm := map[string]int64{}
 		rctm := map[string]*model.RuntimeCompilationTelemetry{}
-		khfr := model.KernelHeaderFetchResult_FetchNotAttempted
 		coretm := map[string]model.COREResult{}
-		chunks := batchConnections(cfg, 0, tc.cur, map[string]*model.DNSEntry{}, "nid", ctm, rctm, model.KernelHeaderFetchResult_FetchNotAttempted, nil, nil, nil, nil, nil)
+		chunks := batchConnections(cfg, 0, tc.cur, map[string]*model.DNSEntry{}, "nid", ctm, rctm, model.KernelHeaderFetchResult_FetchNotAttempted, coretm, nil, nil, nil, nil)
 
 		assert.Len(t, chunks, tc.expectedChunks, "len %d", i)
 		total := 0
