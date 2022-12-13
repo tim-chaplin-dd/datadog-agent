@@ -7,6 +7,7 @@ package workloadmeta
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/retry"
 	"github.com/DataDog/datadog-agent/pkg/workloadmeta/telemetry"
+	"github.com/cenkalti/backoff"
 )
 
 var (
@@ -23,10 +25,11 @@ var (
 )
 
 const (
-	retryCollectorInterval = 30 * time.Second
-	pullCollectorInterval  = 5 * time.Second
-	eventBundleChTimeout   = 1 * time.Second
-	eventChBufferSize      = 50
+	retryCollectorInitialInterval = 1 * time.Second
+	retryCollectorMaxInterval     = 30 * time.Second
+	pullCollectorInterval         = 5 * time.Second
+	eventBundleChTimeout          = 1 * time.Second
+	eventChBufferSize             = 50
 )
 
 type subscriber struct {
@@ -99,7 +102,6 @@ func (s *store) Start(ctx context.Context) {
 	}()
 
 	go func() {
-		retryTicker := time.NewTicker(retryCollectorInterval)
 		pullTicker := time.NewTicker(pullCollectorInterval)
 		health := health.RegisterLiveness("workloadmeta-puller")
 		pullCtx, pullCancel := context.WithTimeout(ctx, pullCollectorInterval)
@@ -121,15 +123,7 @@ func (s *store) Start(ctx context.Context) {
 				pullCtx, pullCancel = context.WithTimeout(ctx, pullCollectorInterval)
 				s.pull(pullCtx)
 
-			case <-retryTicker.C:
-				stop := s.startCandidates(ctx)
-
-				if stop {
-					retryTicker.Stop()
-				}
-
 			case <-ctx.Done():
-				retryTicker.Stop()
 				pullTicker.Stop()
 
 				pullCancel()
@@ -148,7 +142,11 @@ func (s *store) Start(ctx context.Context) {
 		}
 	}()
 
-	s.startCandidates(ctx)
+	go func() {
+		if err := s.startCandidatesWithRetry(ctx); err != nil {
+			log.Errorf("error starting collectors: %s", err)
+		}
+	}()
 
 	log.Info("workloadmeta store initialized successfully")
 }
@@ -368,6 +366,27 @@ func (s *store) Reset(newEntities []Entity, source Source) {
 	}
 
 	s.Notify(events)
+}
+
+func (s *store) startCandidatesWithRetry(ctx context.Context) error {
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.InitialInterval = retryCollectorInitialInterval
+	expBackoff.MaxInterval = retryCollectorMaxInterval
+	expBackoff.MaxElapsedTime = 0 // Don't stop trying
+
+	return backoff.Retry(func() error {
+		select {
+		case <-ctx.Done():
+			return &backoff.PermanentError{Err: fmt.Errorf("stopped before all collectors were able to start")}
+		default:
+		}
+
+		if s.startCandidates(ctx) {
+			return nil
+		}
+
+		return fmt.Errorf("some collectors failed to start. Will retry")
+	}, expBackoff)
 }
 
 func (s *store) startCandidates(ctx context.Context) bool {
