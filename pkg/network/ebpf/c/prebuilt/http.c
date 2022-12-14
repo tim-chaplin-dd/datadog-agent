@@ -9,6 +9,7 @@
 #include "sock.h"
 #include "sockfd.h"
 #include "port_range.h"
+#include "regex_libtls.h"
 #include "protocols/http.h"
 #include "protocols/https.h"
 #include "protocols/http-buffer.h"
@@ -549,6 +550,10 @@ static __always_inline int do_sys_open_helper_enter(struct pt_regs* ctx) {
     if (!path.len) {
         return 0;
     }
+    // if the regex doesn't match, nothing to do
+    if (regex_libtls(path.buf, path.len) == 0) {
+        return 0;
+    }
 
     u64 pid_tgid = bpf_get_current_pid_tgid();
     path.pid = pid_tgid >> 32;
@@ -568,7 +573,6 @@ int kprobe__do_sys_openat2(struct pt_regs* ctx) {
 
 static __always_inline int do_sys_open_helper_exit(struct pt_regs* ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
-
     // If file couldn't be opened, bail out
     if ((long)PT_REGS_RC(ctx) < 0) {
         goto cleanup;
@@ -576,21 +580,7 @@ static __always_inline int do_sys_open_helper_exit(struct pt_regs* ctx) {
 
     lib_path_t *path = bpf_map_lookup_elem(&open_at_args, &pid_tgid);
     if (path == NULL) {
-        return 0;
-    }
-
-    // Detect whether the file being opened is a shared library
-    bool is_shared_library = false;
-#pragma unroll
-    for (int i = 0; i < LIB_PATH_MAX_SIZE - SO_SUFFIX_SIZE; i++) {
-        if (path->buf[i] == '.' && path->buf[i+1] == 's' && path->buf[i+2] == 'o') {
-            is_shared_library = true;
-            break;
-        }
-    }
-
-    if (!is_shared_library) {
-        goto cleanup;
+        return 0; // we don't have interest in this opened file (doesn't match the regex)
     }
 
     // Copy map value into eBPF stack
