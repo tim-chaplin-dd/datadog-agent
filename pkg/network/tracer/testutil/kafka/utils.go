@@ -103,29 +103,23 @@ func PullKafkaDockers() error {
 	return cmd.Run()
 }
 
-func RunKafkaServers(t *testing.T, serverAddr string) {
+func RunKafkaServers(t *testing.T, serverAddr, serverPort string) {
 	t.Helper()
 	envs := []string{
 		fmt.Sprintf("KAFKA_ADDR=%s", serverAddr),
-		"KAFKA_PORT=9092",
+		fmt.Sprintf("KAFKA_PORT=%s", serverPort),
 	}
 	dir, _ := CurDir()
-	cmd := exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "up")
+	cmd := exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "up", "-d")
 	cmd.Env = append(cmd.Env, envs...)
-	go func() {
-		if err := cmd.Run(); err != nil {
-			fmt.Println("error", err)
-		}
-	}()
+	require.NoError(t, cmd.Run())
 
 	t.Cleanup(func() {
 		c := exec.Command("docker-compose", "-f", dir+"/testdata/docker-compose.yml", "down", "--remove-orphans")
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stdout
 		c.Env = append(c.Env, envs...)
 		_ = c.Run()
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	require.NoError(t, waitForKafka(ctx, fmt.Sprintf("%s:9092", serverAddr)))
+	require.NoError(t, waitForKafka(ctx, fmt.Sprintf("%s:%s", serverAddr, serverPort)))
 	cancel()
 }

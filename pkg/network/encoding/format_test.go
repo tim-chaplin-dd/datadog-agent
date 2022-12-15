@@ -125,6 +125,15 @@ func TestFormatProtocols(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:     "kafka protocol",
+			protocol: network.ProtocolKafka,
+			want: &model.ProtocolStack{
+				Stack: []model.ProtocolType{
+					model.ProtocolType_protocolKafka,
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

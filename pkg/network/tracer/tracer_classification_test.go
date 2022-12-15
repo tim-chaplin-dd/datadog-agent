@@ -26,18 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	skipDockerBasedTests = map[string]string{}
-)
-
-func pullTestDockers() {
-	if runtime.GOOS == "linux" {
-		if err := kafka.PullKafkaDockers(); err != nil {
-			skipDockerBasedTests["kafka"] = fmt.Sprintf("skipping as we failed pulling the docker images due to: %s", err)
-		}
-	}
-}
-
 func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, targetHost, serverHost string) {
 	tr, err := NewTracer(cfg)
 	if err != nil {
@@ -57,8 +45,6 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 			Port: 0,
 		},
 	}
-
-	pullTestDockers()
 
 	tests := []struct {
 		name       string
@@ -226,7 +212,6 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 			name: "kafka - produce",
 			clientRun: func(t *testing.T, serverAddr string) {
 				client := kafka.NewClient(clientHost, serverAddr)
-				//require.NoError(t, client.CreateTopic("test"))
 				messages := [][]byte{[]byte("msg1"), []byte("msg2")}
 				require.NoError(t, client.Produce("test", messages...))
 				fetchMessages, err := client.Fetch("test")
@@ -235,15 +220,14 @@ func testProtocolClassification(t *testing.T, cfg *config.Config, clientHost, ta
 			},
 			serverRun: func(t *testing.T, serverAddr string, done chan struct{}) string {
 				serverHost, _, _ := net.SplitHostPort(serverAddr)
-				kafka.RunKafkaServers(t, serverHost)
+				kafka.RunKafkaServers(t, serverHost, "9092")
 				return fmt.Sprintf("%s:9092", serverHost)
 			},
 			shouldSkip: func() (bool, string) {
 				if runtime.GOOS != "linux" {
 					return true, "Kafka tests supported on linux machine only"
 				}
-				errMsg, exists := skipDockerBasedTests["kafka"]
-				return exists, errMsg
+				return false, ""
 			},
 			want: network.ProtocolKafka,
 		},
