@@ -210,7 +210,7 @@ func (p *FileProvider) FilesToTail(inputSources []*sources.LogSource) []*tailer.
 	}
 
 	if len(filesToTail) == p.filesLimit {
-		log.Warn("Reached the limit on the maximum number of files in use: ", p.filesLimit)
+		log.Debug("Reached the limit on the maximum number of files in use: ", p.filesLimit)
 	}
 
 	return filesToTail
