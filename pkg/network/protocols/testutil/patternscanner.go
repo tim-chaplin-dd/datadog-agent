@@ -19,14 +19,23 @@ type PatternScanner struct {
 	stopOnce sync.Once
 	// A helper to spare redundant calls to the analyzer once we've found the relevant log.
 	stopped bool
+	// A memory cache for the logs, if we have been asked to save them
+	Logs      []string
+	logsMutex sync.Mutex
 }
 
-func NewScanner(pattern *regexp.Regexp, doneChan chan struct{}) *PatternScanner {
+func NewScanner(pattern *regexp.Regexp, doneChan chan struct{}, saveLogs bool) *PatternScanner {
+	var logs []string
+	if saveLogs {
+		logs = make([]string, 10)
+	}
 	return &PatternScanner{
-		pattern:  pattern,
-		DoneChan: doneChan,
-		stopOnce: sync.Once{},
-		stopped:  false,
+		pattern:   pattern,
+		DoneChan:  doneChan,
+		stopOnce:  sync.Once{},
+		stopped:   false,
+		Logs:      logs,
+		logsMutex: sync.Mutex{},
 	}
 }
 
@@ -36,6 +45,11 @@ func (ps *PatternScanner) Write(p []byte) (n int, err error) {
 	n = len(p)
 	err = nil
 
+	if ps.Logs != nil {
+		ps.logsMutex.Lock()
+		ps.Logs = append(ps.Logs, string(p))
+		ps.logsMutex.Unlock()
+	}
 	if !ps.stopped && ps.pattern.Match(p) {
 		ps.stopOnce.Do(func() {
 			ps.DoneChan <- struct{}{}

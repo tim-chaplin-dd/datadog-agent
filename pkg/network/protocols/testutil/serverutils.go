@@ -23,7 +23,7 @@ func RunDockerServer(t *testing.T, serverName, dockerPath string, env []string, 
 	t.Helper()
 
 	cmd := exec.Command("docker-compose", "-f", dockerPath, "up")
-	patternScanner := NewScanner(serverStartRegex, make(chan struct{}, 1))
+	patternScanner := NewScanner(serverStartRegex, make(chan struct{}, 1), true)
 
 	cmd.Stdout = patternScanner
 	cmd.Env = append(cmd.Env, env...)
@@ -42,7 +42,10 @@ func RunDockerServer(t *testing.T, serverName, dockerPath string, env []string, 
 		case <-patternScanner.DoneChan:
 			t.Logf("%s server is ready", serverName)
 			return
-		case <-time.After(time.Second * 30):
+		case <-time.After(time.Second * 60):
+			for _, log := range patternScanner.Logs {
+				t.Log(log)
+			}
 			t.Fatalf("failed to start %s server", serverName)
 		}
 	}
