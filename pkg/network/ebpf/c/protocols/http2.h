@@ -43,19 +43,19 @@ static __always_inline bool read_http2_frame_header(const char *buf, size_t buf_
 //
 // The returned remain buffer is either a smaller suffix of p, or err != nil.
 // The error is errNeedMore if p doesn't contain a complete integer.
-static __always_inline __u64 read_var_int(char current_char, __u32 *offset, char n){
-    if (*offset > HTTP2_BUFFER_SIZE) {
+static __always_inline __u64 read_var_int(http2_transaction_t* http2_transaction, char n){
+    if (http2_transaction->current_offset_in_request_fragment > HTTP2_BUFFER_SIZE) {
         return false;
     }
 
-    __u64 index = (__u64)(current_char);
+    __u64 index = (__u64)(http2_transaction->request_fragment[http2_transaction->current_offset_in_request_fragment]);
     __u64 n2 = n;
     if (n < 8) {
         index &= (1 << n2) - 1;
     }
 
     if (index < (1 << n2) - 1) {
-        *offset += 1;
+        http2_transaction->current_offset_in_request_fragment += 1;
         return index;
     }
 
@@ -64,8 +64,8 @@ static __always_inline __u64 read_var_int(char current_char, __u32 *offset, char
 }
 
 // parse_field_indexed is handling the case which the header frame is part of the static table.
-static __always_inline void parse_field_indexed(http2_transaction_t* http2_transaction, __u32 *offset) {
-    __u8 index = read_var_int(http2_transaction->request_fragment[*offset], offset, 7);
+static __always_inline void parse_field_indexed(http2_transaction_t* http2_transaction) {
+    __u8 index = read_var_int(http2_transaction, 7);
 
     log_debug("[http2] ************************ the current index at parse_field_indexed is: %d", index);
 
@@ -97,13 +97,13 @@ static __always_inline bool read_string(http2_transaction_t* http2_transaction, 
 //        is_huff = true;
 //    }
 
-    *out_str_len = read_var_int(http2_transaction->request_fragment[*offset], offset, 7);
+    *out_str_len = read_var_int(http2_transaction, 7);
     return true;
 }
 
 // parse_field_literal handling the case when the key is part of the static table and the value is a dynamic string
 // which will be stored in the dynamic table.
-static __always_inline void parse_field_literal(http2_transaction_t* http2_transaction, __u32 *offset, bool index_type, size_t payload_size, uint8_t n){
+static __always_inline void parse_field_literal(http2_transaction_t* http2_transaction, bool index_type, size_t payload_size, uint8_t n){
     __u64 counter = 0;
     __u64 *counter_ptr = bpf_map_lookup_elem(&http2_dynamic_counter_table, &http2_transaction->tup);
     if (counter_ptr != NULL) {
@@ -212,20 +212,20 @@ static __always_inline void parse_field_literal(http2_transaction_t* http2_trans
 
 // parse_header_field_repr is handling the header frame by bit calculation and is storing the needed data for our
 // internal hpack algorithm.
-static __always_inline void parse_header_field_repr(http2_transaction_t* http2_transaction, __u32 *offset, size_t payload_size) {
-    __u8 first_char = http2_transaction->request_fragment[*offset];
+static __always_inline void parse_header_field_repr(http2_transaction_t* http2_transaction, size_t payload_size) {
+    __u8 first_char = http2_transaction->request_fragment[http2_transaction->current_offset_in_request_fragment];
 //    log_debug("[http2] first char %d", first_char);
 
     if ((first_char&128) != 0) {
         // Indexed representation.
         // MSB bit set.
         // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
-        parse_field_indexed(http2_transaction, offset);
+        parse_field_indexed(http2_transaction);
     } else if ((first_char&192) == 64) {
         // 6.2.1 Literal Header Field with Incremental Indexing
         // top two bits are 10
         // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
-        parse_field_literal(http2_transaction, offset, true, payload_size, 6);
+        parse_field_literal(http2_transaction, true, payload_size, 6);
     }
 //    else if ((first_char&240) == 16) {
 //        // 6.2.2 Literal Header Field without Indexing
@@ -237,41 +237,41 @@ static __always_inline void parse_header_field_repr(http2_transaction_t* http2_t
 }
 
 // This function reads the http2 headers frame.
-static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http2_transaction, __u32 *offset, __u32 payload_size) {
+static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http2_transaction, __u32 payload_size) {
 // need to come back and understand how many times I will iterate over the current frame
 #pragma unroll (HTTP2_MAX_HEADER)
     for (int i = 0; i < HTTP2_MAX_HEADER; i++) {
-        if (*offset > HTTP2_BUFFER_SIZE) {
+        if (http2_transaction->current_offset_in_request_fragment > HTTP2_BUFFER_SIZE) {
             return false;
         }
-        parse_header_field_repr(http2_transaction, offset, payload_size);
+        parse_header_field_repr(http2_transaction, payload_size);
     }
 
     return true;
 }
 
 // This function filters the needed frames from the http2 session.
-static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, __u32 current_offset, struct __sk_buff *skb) {
+static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, struct __sk_buff *skb) {
     struct http2_frame current_frame = {};
     const __u32 skb_len = skb->len;
     // TODO: guy - increase loop
 #pragma unroll (HTTP2_MAX_FRAMES)
     // Iterate till max frames to avoid high connection rate.
     for (uint32_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        if (current_offset + HTTP2_FRAME_HEADER_SIZE > skb_len) {
+        if (http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > skb_len) {
             log_debug("[http2] size is too big!");
             return;
         }
 
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (current_offset > HTTP2_BUFFER_SIZE) {
+        if (http2_transaction->current_offset_in_request_fragment > HTTP2_BUFFER_SIZE) {
             return;
         }
 
-        if (!read_http2_frame_header(http2_transaction->request_fragment + current_offset, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+        if (!read_http2_frame_header(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
             return;
         }
-        current_offset += HTTP2_FRAME_HEADER_SIZE;
+        http2_transaction->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
 
         if (current_frame.length == 0) {
             continue;
@@ -279,22 +279,22 @@ static __always_inline void process_http2_frames(http2_transaction_t* http2_tran
 
         // Filter all types of frames except header frame.
         if (current_frame.type != kHeadersFrame) {
-            current_offset += (__u32)current_frame.length;
+            http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
             continue;
         }
 
         // Verify size of pos with max of XX not bigger then the packet.
-        if (current_offset + (__u32)current_frame.length > skb_len) {
+        if (http2_transaction->current_offset_in_request_fragment + (__u32)current_frame.length > skb_len) {
             return;
         }
 
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (!decode_http2_headers_frame(http2_transaction, &current_offset, current_frame.length)){
+        if (!decode_http2_headers_frame(http2_transaction, current_frame.length)){
             log_debug("[http2] unable to read http2 header frame");
             return;
         }
 
-        current_offset += (__u32)current_frame.length;
+        http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
     }
 }
 

@@ -125,6 +125,7 @@ typedef struct {
 
     __u64 internal_dynamic_counter;
 
+    __u32 current_offset_in_request_fragment;
     __u8  request_method;
     __u8  packet_type;
     __u8  schema;
