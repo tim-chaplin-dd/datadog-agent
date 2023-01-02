@@ -88,6 +88,7 @@ int socket__http2_filter(struct __sk_buff *skb) {
 
     read_into_buffer_skb((char *)http2->request_fragment, skb, &skb_info);
 
+    __u32 current_offset = 0;
     // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) prefix
     if (http2_marker_prefix(http2->request_fragment, HTTP2_MARKER_SIZE-HTTP2_FRAME_HEADER_SIZE)) {
         // Validate that the extra 15 bytes after the prefix is the suffix of the magic.
@@ -100,12 +101,12 @@ int socket__http2_filter(struct __sk_buff *skb) {
         }
 
         // Update the position to be after the magic.
-        http2->current_offset_in_request_fragment += HTTP2_MARKER_SIZE;
+        current_offset += HTTP2_MARKER_SIZE;
     }
 
 
-    process_http2_frames(http2, skb);
-    http2_process(http2, NO_TAGS);
+    process_http2_frames(http2, current_offset, skb);
+//    http2_process(http2, NO_TAGS);
     return 0;
 }
 

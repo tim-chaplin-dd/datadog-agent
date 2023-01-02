@@ -3,13 +3,16 @@
 
 #include <linux/types.h>
 
+#define HTTP2_FRAME_HEADER_SIZE 9
+#define HTTP2_SETTINGS_SIZE 6
+
 // A limit of max frames we will upload from a single connection to the user mode.
 // NOTE: we may need to revisit this const if we need to capture more connections.
 #define HTTP2_MAX_FRAMES 2
 
 // A limit of max frame size in order to be able to load a max size and pass the varifier.
 // NOTE: we may need to change the max size.
-#define HTTP2_MAX_FRAME_LEN 60
+#define HTTP2_MAX_FRAME_LEN 80
 
 // A limit of max frame size in order to be able to load a max size and pass the varifier.
 // NOTE: we may need to change the max size.
@@ -79,5 +82,29 @@ typedef enum
 } http2_method_t;
 
 #define MAX_STATIC_TABLE_INDEX 64
+
+#define HTTP2_BUFFER_SIZE (8 * 20)
+// HTTP2 transaction information associated to a certain socket (tuple_t)
+typedef struct {
+    conn_tuple_t tup;
+    __u64 request_started;
+    __u64 tags;
+    __u64 response_last_seen;
+
+    __u32 tcp_seq;
+
+    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
+
+    __u16 response_status_code;
+    __u16 owned_by_src_port;
+
+    __u64 internal_dynamic_counter;
+
+    __u8  request_method;
+    __u8  packet_type;
+    __u8  schema;
+    char path[32] __attribute__ ((aligned (8)));
+    char authority[32] __attribute__ ((aligned (8)));
+} http2_transaction_t;
 
 #endif
