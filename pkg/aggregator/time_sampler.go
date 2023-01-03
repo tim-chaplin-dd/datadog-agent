@@ -180,6 +180,7 @@ func (s *TimeSampler) dedupSerieBySerieSignature(
 			serie.Host = context.Host
 			serie.NoIndex = context.noIndex
 			serie.Interval = s.interval
+			serie.Source = context.source
 
 			serieBySignature[serieSignature] = serie
 		}
