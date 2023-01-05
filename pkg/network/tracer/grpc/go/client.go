@@ -8,7 +8,6 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc/examples/route_guide/routeguide"
 	"io"
 	"math/rand"
 	"net"
@@ -23,43 +22,6 @@ import (
 const (
 	defaultDialTimeout = 5 * time.Second
 )
-
-func (c *Client) GetFeature(ctx context.Context, long, lat int32) error {
-	_, err := c.routeguidClient.GetFeature(ctx, &routeguide.Point{
-		Latitude:  lat,
-		Longitude: long,
-	})
-	return err
-}
-
-func (c *Client) ListFeatures(ctx context.Context, longLo, latLo, longHi, latHi int32) error {
-	stream, err := c.routeguidClient.ListFeatures(ctx, &routeguide.Rectangle{
-		Lo: &routeguide.Point{
-			Latitude:  latLo,
-			Longitude: longLo,
-		},
-		Hi: &routeguide.Point{
-			Latitude:  latHi,
-			Longitude: longHi,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	for {
-		feature, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Feature: name: %q, point:(%v, %v)\n", feature.GetName(),
-			feature.GetLocation().GetLatitude(), feature.GetLocation().GetLongitude())
-	}
-
-	return nil
-}
 
 // HandleUnary performs a gRPC unary call to SayHello RPC of the greeter service.
 func (c *Client) HandleUnary(ctx context.Context, name string) error {
@@ -130,10 +92,9 @@ func (c *Client) HandleStream(ctx context.Context, numberOfMessages int32) error
 
 // Client represents a single gRPC client that fits the gRPC server.
 type Client struct {
-	conn            *grpc.ClientConn
-	greeterClient   pb.GreeterClient
-	streamClient    pbStream.MathClient
-	routeguidClient routeguide.RouteGuideClient
+	conn          *grpc.ClientConn
+	greeterClient pb.GreeterClient
+	streamClient  pbStream.MathClient
 }
 
 // Options allows to determine the behavior of the client.
@@ -166,10 +127,9 @@ func NewClient(addr string, options Options) (Client, error) {
 		return Client{}, err
 	}
 	return Client{
-		conn:            conn,
-		greeterClient:   pb.NewGreeterClient(conn),
-		streamClient:    pbStream.NewMathClient(conn),
-		routeguidClient: routeguide.NewRouteGuideClient(conn),
+		conn:          conn,
+		greeterClient: pb.NewGreeterClient(conn),
+		streamClient:  pbStream.NewMathClient(conn),
 	}, nil
 }
 
