@@ -120,7 +120,7 @@ const NumStatusClasses = 5
 // RequestStats stores stats for HTTP requests to a particular path, organized by the class
 // of the response code (1XX, 2XX, 3XX, 4XX, 5XX)
 type RequestStats struct {
-	data [NumStatusClasses]*RequestStat
+	Data map[uint16]*RequestStat
 }
 
 // RequestStat stores stats for HTTP requests to a particular path
@@ -145,58 +145,52 @@ type RequestStat struct {
 	DynamicTags []string
 }
 
-func (r *RequestStats) idx(status int) int {
-	return status/100 - 1
+func (r *RequestStats) isValid(status uint16) bool {
+	return status >= 100 && status < 600
 }
 
-func (r *RequestStats) isValid(status int) bool {
-	i := r.idx(status)
-	return i >= 0 && i < len(r.data)
-}
-
-func (r *RequestStats) init(status int) {
-	r.data[r.idx(status)] = new(RequestStat)
+func (r *RequestStats) init(status uint16) {
+	r.Data[status] = new(RequestStat)
 }
 
 // Stats returns the RequestStat object for the provided status.
 // If no stats exist, or the status code is invalid, it will return nil.
-func (r *RequestStats) Stats(status int) *RequestStat {
-	i := r.idx(status)
-	if i < 0 || i >= len(r.data) {
+func (r *RequestStats) Stats(status uint16) *RequestStat {
+	if !r.isValid(status) {
 		return nil
 	}
-	return r.data[i]
+	return r.Data[status]
 }
 
 // HasStats returns true if there is data for that status class
-func (r *RequestStats) HasStats(status int) bool {
-	i := r.idx(status)
-	if i < 0 || i >= len(r.data) {
+func (r *RequestStats) HasStats(status uint16) bool {
+	if !r.isValid(status) {
 		return false
 	}
-	return r.data[i] != nil && r.data[i].Count > 0
+
+	return r.Data[status] != nil && r.Data[status].Count > 0
 }
 
 // CombineWith merges the data in 2 RequestStats objects
 // newStats is kept as it is, while the method receiver gets mutated
 func (r *RequestStats) CombineWith(newStats *RequestStats) {
-	for statusClass := 100; statusClass <= 500; statusClass += 100 {
-		if !newStats.HasStats(statusClass) {
+	for status := range newStats.Data {
+		if !newStats.HasStats(status) {
 			// Nothing to do in this case
 			continue
 		}
 
-		newStatsData := newStats.Stats(statusClass)
+		newStatsData := newStats.Stats(status)
 		if newStatsData.Count == 1 {
 			// The other bucket has a single latency sample, so we "manually" add it
-			r.AddRequest(statusClass, newStatsData.FirstLatencySample, newStatsData.StaticTags, newStatsData.DynamicTags)
+			r.AddRequest(status, newStatsData.FirstLatencySample, newStatsData.StaticTags, newStatsData.DynamicTags)
 			continue
 		}
 
-		stats := r.Stats(statusClass)
+		stats := r.Stats(status)
 		if stats == nil {
-			r.init(statusClass)
-			stats = r.Stats(statusClass)
+			r.init(status)
+			stats = r.Stats(status)
 		}
 
 		// The other bucket (newStats) has multiple samples and therefore a DDSketch object
@@ -222,14 +216,15 @@ func (r *RequestStats) CombineWith(newStats *RequestStats) {
 }
 
 // AddRequest takes information about a HTTP transaction and adds it to the request stats
-func (r *RequestStats) AddRequest(statusClass int, latency float64, staticTags uint64, dynamicTags []string) {
-	if !r.isValid(statusClass) {
+func (r *RequestStats) AddRequest(statusCode uint16, latency float64, staticTags uint64, dynamicTags []string) {
+	if !r.isValid(statusCode) {
 		return
 	}
-	stats := r.Stats(statusClass)
+
+	stats := r.Stats(statusCode)
 	if stats == nil {
-		r.init(statusClass)
-		stats = r.Stats(statusClass)
+		r.init(statusCode)
+		stats = r.Stats(statusCode)
 	}
 
 	stats.StaticTags |= staticTags
@@ -273,9 +268,9 @@ func (r *RequestStat) initSketch() (err error) {
 // HalfAllCounts sets the count of all stats for each status class to half their current value.
 // This is used to remove duplicates from the count in the context of Windows localhost traffic.
 func (r *RequestStats) HalfAllCounts() {
-	for i := 0; i < NumStatusClasses; i++ {
-		if r.data[i] != nil {
-			r.data[i].Count = r.data[i].Count / 2
+	for _, stats := range r.Data {
+		if stats != nil {
+			stats.Count = stats.Count / 2
 		}
 	}
 }

@@ -114,11 +114,13 @@ func (h *httpStatKeeper) add(tx httpTX) {
 			return
 		}
 		h.telemetry.aggregations.Add(1)
-		stats = new(RequestStats)
+		stats = &RequestStats{
+			Data: make(map[uint16]*RequestStat),
+		}
 		h.stats[key] = stats
 	}
 
-	stats.AddRequest(tx.StatusClass(), latency, tx.StaticTags(), tx.DynamicTags())
+	stats.AddRequest(tx.StatusCode(), latency, tx.StaticTags(), tx.DynamicTags())
 }
 
 func (h *httpStatKeeper) newKey(tx httpTX, path string, fullPath bool) Key {

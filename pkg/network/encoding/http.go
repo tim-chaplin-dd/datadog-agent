@@ -148,12 +148,12 @@ func (e *httpEncoder) buildAggregations(payload *network.Connections) {
 
 		staticTags := e.staticTags[key.KeyTuple]
 		var dynamicTags map[string]struct{}
-		for i, data := range ms.StatsByResponseStatus {
-			class := (i + 1) * 100
-			if !stats.HasStats(class) {
+		for s, data := range ms.StatsByStatusCode {
+			status := uint16(s)
+			if !stats.HasStats(status) {
 				continue
 			}
-			s := stats.Stats(class)
+			s := stats.Stats(status)
 			data.Count = uint32(s.Count)
 
 			if latencies := s.Latencies; latencies != nil {
