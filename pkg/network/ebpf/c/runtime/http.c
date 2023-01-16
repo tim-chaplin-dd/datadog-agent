@@ -53,14 +53,67 @@ int socket__http_filter(struct __sk_buff *skb) {
     return 0;
 }
 
+// read_var_int reads an unsigned variable length integer off the
+// beginning of p. n is the parameter as described in
+// https://httpwg.org/specs/rfc7541.html#rfc.section.5.1.
+//
+// n must always be between 1 and 8.
+//
+// The returned remain buffer is either a smaller suffix of p, or err != nil.
+// The error is errNeedMore if p doesn't contain a complete integer.
+static __always_inline __u64 read_var_int(http2_connection_t* http2_conn, __u32 *offset, char n){
+    if (n < 1 || n > 8) {
+        return -1;
+    }
+
+    __u64 index = (__u64)(http2_conn->request_fragment[*offset]);
+    __u64 n2 = n;
+    if (n < 8) {
+        index &= (1 << n2) - 1;
+    }
+
+    if (index < (1 << n2) - 1) {
+        *offset += 1;
+        return index;
+    }
+
+    // TODO: compare with original code if needed.
+    return -1;
+}
+
+// parse_field_indexed is handling the case which the header frame is part of the static table.
+static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, __u32 *offset){
+    __u64 index = read_var_int(http2_conn, offset, 7);
+    if (index <= 61) {
+        log_debug("[http2] static value");
+    } else {
+        log_debug("[http2] dynamic value");
+    }
+}
+
 // This function reads the http2 headers frame.
 static __always_inline bool decode_http2_headers_frame(http2_connection_t* http2_conn, __u32 *offset, __u32 payload_size) {
     log_debug("[http2] decode_http2_headers_frame is in");
+    __u8 first_char;
 
 #pragma unroll (HTTP2_MAX_HEADERS_COUNT)
     for (unsigned i = 0; i < HTTP2_MAX_HEADERS_COUNT; i++) {
         if (*offset > HTTP2_BUFFER_SIZE) {
             return false;
+        }
+
+       first_char = http2_conn->request_fragment[*offset];
+
+        if ((first_char&128) != 0) {
+            // Indexed representation.
+            // MSB bit set.
+            // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
+            parse_field_indexed(http2_conn, offset);
+        }
+        if ((first_char&192) == 64) {
+            // 6.2.1 Literal Header Field with Incremental Indexing
+            // top two bits are 10
+            // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
         }
     }
 
@@ -98,6 +151,11 @@ static __always_inline void process_http2_frames(http2_connection_t* http2_conn,
         if (current_frame.type != kHeadersFrame) {
             current_offset_in_request_fragment += (__u32)current_frame.length;
             continue;
+        }
+
+        // If we don't poses all the frame in out fragment, do not try to process.
+        if (current_offset_in_request_fragment + current_frame.length >= transaction_end) {
+            break;
         }
 
         if (!decode_http2_headers_frame(http2_conn, &current_offset_in_request_fragment, current_frame.length)){
