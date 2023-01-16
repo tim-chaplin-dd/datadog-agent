@@ -67,9 +67,11 @@ int socket__http2_filter(struct __sk_buff *skb) {
     char preface_buffer[HTTP2_MARKER_SIZE] = {};
     read_into_buffer_skb((char *)preface_buffer, skb, &skb_info);
     if (is_http2_preface(preface_buffer, payload_length)) {
+        log_debug("[http2] found preface, aborting. Payload size is %d.\n", payload_length);
         return 0;
     }
 
+    log_debug("[http2] payload is not preface, processing. Payload size is %d.\n", payload_length);
     // TODO: If we are reading a preface, then we should skip the first 24 characters, as we are "losing" 24 bytes in
     // our request fragment. Furthermore, it is unlikely that we will have any frame attached to the preface.
     read_into_buffer_skb((char *)http2_conn.request_fragment, skb, &skb_info);
