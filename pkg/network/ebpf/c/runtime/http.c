@@ -52,6 +52,12 @@ int socket__http_filter(struct __sk_buff *skb) {
     return 0;
 }
 
+SEC("socket/http2_filter")
+int socket__http2_filter(struct __sk_buff *skb) {
+    log_debug("hello");
+    return 0;
+}
+
 SEC("kprobe/tcp_sendmsg")
 int kprobe__tcp_sendmsg(struct pt_regs *ctx) {
     log_debug("kprobe/tcp_sendmsg: sk=%llx\n", PT_REGS_PARM1(ctx));

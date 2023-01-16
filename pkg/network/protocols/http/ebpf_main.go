@@ -36,7 +36,8 @@ const (
 	protocolDispatcherSocketFilterFunction = "socket__protocol_dispatcher"
 	protocolDispatcherProgramsMap          = "protocols_progs"
 
-	httpSocketFilter = "socket/http_filter"
+	httpSocketFilter  = "socket/http_filter"
+	http2SocketFilter = "socket/http2_filter"
 
 	// maxActive configures the maximum number of instances of the
 	// kretprobe-probed functions handled simultaneously.  This value should be
@@ -96,6 +97,14 @@ var tailCalls = []manager.TailCallRoute{
 		ProbeIdentificationPair: manager.ProbeIdentificationPair{
 			EBPFSection:  httpSocketFilter,
 			EBPFFuncName: "socket__http_filter",
+		},
+	},
+	{
+		ProgArrayName: protocolDispatcherProgramsMap,
+		Key:           uint32(ProtocolHTTP2),
+		ProbeIdentificationPair: manager.ProbeIdentificationPair{
+			EBPFSection:  http2SocketFilter,
+			EBPFFuncName: "socket__http2_filter",
 		},
 	},
 }
@@ -228,6 +237,14 @@ func (e *ebpfProgram) Init() error {
 					EBPFFuncName: "tracepoint__net__netif_receive_skb",
 					UID:          probeUID,
 				},
+			},
+		},
+		VerifierOptions: ebpf.CollectionOptions{
+			Programs: ebpf.ProgramOptions{
+				// LogSize is the size of the log buffer given to the verifier. Give it a big enough (2 * 1024 * 1024)
+				// value so that all our programs fit. If the verifier ever outputs a `no space left on device` error,
+				// we'll need to increase this value.
+				LogSize: 100 * 1024 * 1024,
 			},
 		},
 		ConstantEditors:           e.offsets,
