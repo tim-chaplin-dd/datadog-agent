@@ -10,6 +10,7 @@
 #include "conn-tuple.h"
 #include "port_range.h"
 #include "protocols/http.h"
+#include "protocols/http2-decoding-defs.h"
 #include "protocols/http-buffer.h"
 #include "protocols/https.h"
 #include "protocols/go-tls-types.h"
@@ -54,7 +55,26 @@ int socket__http_filter(struct __sk_buff *skb) {
 
 SEC("socket/http2_filter")
 int socket__http2_filter(struct __sk_buff *skb) {
-    log_debug("hello");
+    http2_connection_t http2_conn;
+    bpf_memset(&http2_conn, 0, sizeof(http2_connection_t));
+
+    skb_info_t skb_info;
+    if (!read_conn_tuple_skb(skb, &skb_info, &http2_conn.tup)) {
+        return 0;
+    }
+
+    const __u32 payload_length = skb->len - skb_info.data_off;
+    char preface_buffer[HTTP2_MARKER_SIZE] = {};
+    read_into_buffer_skb((char *)preface_buffer, skb, &skb_info);
+    if (is_http2_preface(preface_buffer, payload_length)) {
+        return 0;
+    }
+
+    // TODO: If we are reading a preface, then we should skip the first 24 characters, as we are "losing" 24 bytes in
+    // our request fragment. Furthermore, it is unlikely that we will have any frame attached to the preface.
+    read_into_buffer_skb((char *)http2_conn.request_fragment, skb, &skb_info);
+
+    //http2_process()
     return 0;
 }
 
