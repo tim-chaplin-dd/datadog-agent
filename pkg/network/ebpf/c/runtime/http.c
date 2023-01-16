@@ -67,6 +67,46 @@ static __always_inline bool decode_http2_headers_frame(http2_connection_t* http2
     return true;
 }
 
+static __always_inline void process_http2_frames(http2_connection_t* http2_conn, __u32 payload_length) {
+    struct http2_frame current_frame = {};
+
+    const __u32 transaction_end = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
+
+    __u32 current_offset_in_request_fragment = 0;
+    bool is_end_of_stream = false;
+#pragma unroll HTTP2_MAX_FRAMES
+    // Iterate till max frames to avoid high connection rate.
+    for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
+        if (current_offset_in_request_fragment >= transaction_end) {
+            break;
+        }
+
+        if (current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE >= transaction_end) {
+            break;
+        }
+
+        if (!read_http2_frame_header(&http2_conn->request_fragment[current_offset_in_request_fragment], HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+            break;
+        }
+        current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+
+        if ((current_frame.flags & HTTP2_END_OF_STREAM) != 0) {
+            is_end_of_stream = current_frame.type == kDataFrame || current_frame.type == kHeadersFrame;
+            // TODO: handle end of stream.
+        }
+
+        if (current_frame.type != kHeadersFrame) {
+            current_offset_in_request_fragment += (__u32)current_frame.length;
+            continue;
+        }
+
+        if (!decode_http2_headers_frame(http2_conn, &current_offset_in_request_fragment, current_frame.length)){
+            log_debug("[http2] unable to read http2 header frame");
+            break;
+        }
+    }
+}
+
 SEC("socket/http2_filter")
 int socket__http2_filter(struct __sk_buff *skb) {
     http2_connection_t http2_conn;
@@ -92,43 +132,7 @@ int socket__http2_filter(struct __sk_buff *skb) {
 
 
     // TODO: Move into a function
-    struct http2_frame current_frame = {};
-
-    const __u32 transaction_end = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
-
-    __u32 current_offset_in_request_fragment = 0;
-    bool is_end_of_stream = false;
-#pragma unroll HTTP2_MAX_FRAMES
-    // Iterate till max frames to avoid high connection rate.
-    for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        if (current_offset_in_request_fragment >= transaction_end) {
-            break;
-        }
-
-        if (current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE >= transaction_end) {
-            break;
-        }
-
-        if (!read_http2_frame_header(&http2_conn.request_fragment[current_offset_in_request_fragment], HTTP2_FRAME_HEADER_SIZE, &current_frame)){
-            break;
-        }
-        current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
-
-        if ((current_frame.flags & HTTP2_END_OF_STREAM) != 0) {
-            is_end_of_stream = current_frame.type == kDataFrame || current_frame.type == kHeadersFrame;
-            // TODO: handle end of stream.
-        }
-
-        if (current_frame.type != kHeadersFrame) {
-            current_offset_in_request_fragment += (__u32)current_frame.length;
-            continue;
-        }
-
-        if (!decode_http2_headers_frame(&http2_conn, &current_offset_in_request_fragment, current_frame.length)){
-            log_debug("[http2] unable to read http2 header frame");
-            break;
-        }
-    }
+    process_http2_frames(&http2_conn, payload_length);
     return 0;
 }
 
