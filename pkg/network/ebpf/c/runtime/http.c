@@ -11,6 +11,7 @@
 #include "port_range.h"
 #include "protocols/http.h"
 #include "protocols/http2-decoding-defs.h"
+#include "protocols/http2-decoding-maps.h"
 #include "protocols/http-buffer.h"
 #include "protocols/https.h"
 #include "protocols/go-tls-types.h"
@@ -85,10 +86,18 @@ static __always_inline __u64 read_var_int(http2_connection_t* http2_conn, __u32 
 static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, __u32 *offset){
     __u64 index = read_var_int(http2_conn, offset, 7);
     if (index <= 61) {
-        log_debug("[http2] static value");
-    } else {
-        log_debug("[http2] dynamic value");
+        // static table
+        static_table_entry_t* entry = bpf_map_lookup_elem(&http2_static_table, &index);
+        if (entry == NULL) {
+            return;
+        }
+
+//        classify_static_value(http2_transaction, static_value);
+        return;
     }
+
+    // dynamic table
+    log_debug("[http2] dynamic value");
 }
 
 // This function reads the http2 headers frame.

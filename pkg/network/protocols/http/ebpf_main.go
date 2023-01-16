@@ -11,6 +11,7 @@ package http
 import (
 	"fmt"
 	"math"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"golang.org/x/sys/unix"
@@ -124,6 +125,7 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 			{Name: "bio_new_socket_args"},
 			{Name: "fd_by_ssl_bio"},
 			{Name: "ssl_ctx_by_pid_tgid"},
+			{Name: "http2_static_table"},
 		},
 		Probes: []*manager.Probe{
 			{
@@ -263,6 +265,104 @@ func (e *ebpfProgram) Init() error {
 		return err
 	}
 
+	return e.InitHTTP2StaticMap()
+}
+
+func (e *ebpfProgram) InitHTTP2StaticMap() error {
+	staticTable, _, err := e.Manager.GetMap("http2_static_table")
+	if err != nil {
+		return err
+	}
+	type staticTableEntry struct {
+		Index uint64
+		Value StaticTableEntry
+	}
+
+	staticTableEntries := []staticTableEntry{
+		{
+			Index: 2,
+			Value: StaticTableEntry{
+				Key:   MethodKey,
+				Value: GetValue,
+			},
+		},
+		{
+			Index: 3,
+			Value: StaticTableEntry{
+				Key:   MethodKey,
+				Value: PostValue,
+			},
+		},
+		{
+			Index: 4,
+			Value: StaticTableEntry{
+				Key:   PathKey,
+				Value: EmptyPathValue,
+			},
+		},
+		{
+			Index: 5,
+			Value: StaticTableEntry{
+				Key:   PathKey,
+				Value: IndexPathValue,
+			},
+		},
+		{
+			Index: 8,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K200Value,
+			},
+		},
+		{
+			Index: 9,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K204Value,
+			},
+		},
+		{
+			Index: 10,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K206Value,
+			},
+		},
+		{
+			Index: 11,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K304Value,
+			},
+		},
+		{
+			Index: 12,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K400Value,
+			},
+		},
+		{
+			Index: 13,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K404Value,
+			},
+		},
+		{
+			Index: 14,
+			Value: StaticTableEntry{
+				Key:   StatusKey,
+				Value: K500Value,
+			},
+		},
+	}
+
+	for _, entry := range staticTableEntries {
+		if err := staticTable.Put(unsafe.Pointer(&entry.Index), unsafe.Pointer(&entry.Value)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -13,6 +13,7 @@ package http
 #include "../../ebpf/c/protocols/tags-types.h"
 #include "../../ebpf/c/protocols/http-types.h"
 #include "../../ebpf/c/protocols/protocol-classification-defs.h"
+#include "../../ebpf/c/protocols/http2-decoding-defs.h"
 */
 import "C"
 
@@ -28,15 +29,15 @@ type ProtocolType C.protocol_t
 
 // Add tests to TestProtocolValue
 const (
-	ProtocolUnknown ProtocolType = C.PROTOCOL_UNKNOWN
-	ProtocolHTTP    ProtocolType = C.PROTOCOL_HTTP
-	ProtocolHTTP2   ProtocolType = C.PROTOCOL_HTTP2
-	ProtocolTLS     ProtocolType = C.PROTOCOL_TLS
-	ProtocolMONGO   ProtocolType = C.PROTOCOL_MONGO
+	ProtocolUnknown  ProtocolType = C.PROTOCOL_UNKNOWN
+	ProtocolHTTP     ProtocolType = C.PROTOCOL_HTTP
+	ProtocolHTTP2    ProtocolType = C.PROTOCOL_HTTP2
+	ProtocolTLS      ProtocolType = C.PROTOCOL_TLS
+	ProtocolMONGO    ProtocolType = C.PROTOCOL_MONGO
 	ProtocolPostgres ProtocolType = C.PROTOCOL_POSTGRES
-	ProtocolAMQP    ProtocolType = C.PROTOCOL_AMQP
-	ProtocolRedis   ProtocolType = C.PROTOCOL_REDIS
-	ProtocolMax     ProtocolType = C.MAX_PROTOCOLS
+	ProtocolAMQP     ProtocolType = C.PROTOCOL_AMQP
+	ProtocolRedis    ProtocolType = C.PROTOCOL_REDIS
+	ProtocolMax      ProtocolType = C.MAX_PROTOCOLS
 )
 
 const (
@@ -60,3 +61,29 @@ var (
 		Go:      "tls.library:go",
 	}
 )
+
+type StaticTableEnumKey = C.header_key
+
+const (
+	MethodKey StaticTableEnumKey = C.kMethod
+	PathKey   StaticTableEnumKey = C.kPath
+	StatusKey StaticTableEnumKey = C.kStatus
+)
+
+type StaticTableEnumValue = C.header_value
+
+const (
+	GetValue       StaticTableEnumValue = C.kGET
+	PostValue      StaticTableEnumValue = C.kPOST
+	EmptyPathValue StaticTableEnumValue = C.kEmptyPath
+	IndexPathValue StaticTableEnumValue = C.kIndexPath
+	K200Value      StaticTableEnumValue = C.k200
+	K204Value      StaticTableEnumValue = C.k204
+	K206Value      StaticTableEnumValue = C.k206
+	K304Value      StaticTableEnumValue = C.k304
+	K400Value      StaticTableEnumValue = C.k400
+	K404Value      StaticTableEnumValue = C.k404
+	K500Value      StaticTableEnumValue = C.k500
+)
+
+type StaticTableEntry C.static_table_entry_t

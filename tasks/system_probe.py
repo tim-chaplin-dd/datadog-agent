@@ -304,6 +304,7 @@ def ninja_cgo_type_files(nw, windows):
             ],
             "pkg/network/protocols/http/http_types.go": [
                 "pkg/network/ebpf/c/tracer.h",
+                "pkg/network/ebpf/c/protocols/http2-decoding-defs.h",
                 "pkg/network/ebpf/c/protocols/tags-types.h",
                 "pkg/network/ebpf/c/protocols/http-types.h",
                 "pkg/network/ebpf/c/protocols/protocol-classification-defs.h",

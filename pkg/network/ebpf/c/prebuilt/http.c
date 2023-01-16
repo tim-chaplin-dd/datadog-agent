@@ -14,7 +14,8 @@
 #include "protocols/http-buffer.h"
 #include "protocols/tags-types.h"
 #include "protocols/protocol-dispatcher-helpers.h"
-
+#include "protocols/http2-decoding-defs.h"
+#include "protocols/http2-decoding-maps.h"
 
 #define SO_SUFFIX_SIZE 3
 
@@ -47,6 +48,156 @@ int socket__http_filter(struct __sk_buff* skb) {
 
     read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
     http_process(&http, &skb_info, NO_TAGS);
+    return 0;
+}
+
+// read_var_int reads an unsigned variable length integer off the
+// beginning of p. n is the parameter as described in
+// https://httpwg.org/specs/rfc7541.html#rfc.section.5.1.
+//
+// n must always be between 1 and 8.
+//
+// The returned remain buffer is either a smaller suffix of p, or err != nil.
+// The error is errNeedMore if p doesn't contain a complete integer.
+static __always_inline __u64 read_var_int(http2_connection_t* http2_conn, char n){
+    if (n < 1 || n > 8) {
+        return -1;
+    }
+
+    __u64 index = (__u64)(http2_conn->request_fragment[http2_conn->offset]);
+    __u64 n2 = n;
+    if (n < 8) {
+        index &= (1 << n2) - 1;
+    }
+
+    if (index < (1 << n2) - 1) {
+        http2_conn->offset += 1;
+        return index;
+    }
+
+    // TODO: compare with original code if needed.
+    return -1;
+}
+
+// parse_field_indexed is handling the case which the header frame is part of the static table.
+static __always_inline void parse_field_indexed(http2_connection_t* http2_conn){
+    __u64 index = read_var_int(http2_conn, 7);
+    if (index <= 61) {
+        // static table
+        static_table_entry_t* entry = bpf_map_lookup_elem(&http2_static_table, &index);
+        if (entry == NULL) {
+            return;
+        }
+
+//        classify_static_value(http2_transaction, static_value);
+        return;
+    }
+
+    // dynamic table
+    log_debug("[http2] dynamic value");
+}
+
+// This function reads the http2 headers frame.
+static __always_inline bool decode_http2_headers_frame(http2_connection_t* http2_conn, __u32 payload_size) {
+    log_debug("[http2] decode_http2_headers_frame is in");
+    __u8 first_char;
+
+//#pragma unroll (HTTP2_MAX_HEADERS_COUNT)
+    for (unsigned i = 0; i < HTTP2_MAX_HEADERS_COUNT; i++) {
+        if (http2_conn->offset > HTTP2_BUFFER_SIZE) {
+            return false;
+        }
+
+       first_char = http2_conn->request_fragment[http2_conn->offset];
+
+        if ((first_char&128) != 0) {
+            // Indexed representation.
+            // MSB bit set.
+            // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
+            parse_field_indexed(http2_conn);
+        }
+        if ((first_char&192) == 64) {
+            // 6.2.1 Literal Header Field with Incremental Indexing
+            // top two bits are 10
+            // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
+        }
+    }
+
+    return true;
+}
+
+static __always_inline void process_http2_frames(http2_connection_t* http2_conn, __u32 payload_length) {
+    struct http2_frame current_frame = {};
+
+    const __u32 transaction_end = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
+
+    bool is_end_of_stream = false;
+#pragma unroll HTTP2_MAX_FRAMES
+    // Iterate till max frames to avoid high connection rate.
+    for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
+        if (http2_conn->offset >= transaction_end) {
+            break;
+        }
+
+        if (http2_conn->offset + HTTP2_FRAME_HEADER_SIZE >= transaction_end) {
+            break;
+        }
+
+        barrier();
+        if (!read_http2_frame_header(http2_conn->request_fragment + http2_conn->offset, transaction_end - http2_conn->offset, &current_frame)){
+            break;
+        }
+        http2_conn->offset += HTTP2_FRAME_HEADER_SIZE;
+
+        if ((current_frame.flags & HTTP2_END_OF_STREAM) != 0) {
+            is_end_of_stream = current_frame.type == kDataFrame || current_frame.type == kHeadersFrame;
+            // TODO: handle end of stream.
+        }
+
+        if (current_frame.type != kHeadersFrame) {
+            http2_conn->offset += (__u32)current_frame.length;
+            continue;
+        }
+
+        // If we don't poses all the frame in out fragment, do not try to process.
+        if (http2_conn->offset + current_frame.length >= transaction_end) {
+            break;
+        }
+
+        if (!decode_http2_headers_frame(http2_conn, current_frame.length)){
+            log_debug("[http2] unable to read http2 header frame");
+            break;
+        }
+    }
+}
+
+SEC("socket/http2_filter")
+int socket__http2_filter(struct __sk_buff *skb) {
+    http2_connection_t http2_conn = {};// = bpf_map_lookup_elem(&http2_trans_alloc, &zero);
+//    bpf_memset(http2_conn.request_fragment, 0, sizeof(http2_conn.request_fragment));
+//    bpf_memset(&http2_conn.tup, 0, sizeof(http2_conn.tup));
+//    http2_conn.offset = 0;
+
+    skb_info_t skb_info;
+    if (!read_conn_tuple_skb(skb, &skb_info, &http2_conn.tup)) {
+        return 0;
+    }
+
+    const __u32 payload_length = skb->len - skb_info.data_off;
+    char preface_buffer[HTTP2_MARKER_SIZE] = {};
+    read_into_buffer_skb((char *)preface_buffer, skb, &skb_info);
+    if (is_http2_preface(preface_buffer, payload_length)) {
+        log_debug("[http2] found preface, aborting. Payload size is %d.\n", payload_length);
+        return 0;
+    }
+
+    log_debug("[http2] payload is not preface, processing. Payload size is %d.\n", payload_length);
+    // TODO: If we are reading a preface, then we should skip the first 24 characters, as we are "losing" 24 bytes in
+    // our request fragment. Furthermore, it is unlikely that we will have any frame attached to the preface.
+    read_into_buffer_skb((char *)http2_conn.request_fragment, skb, &skb_info);
+
+    // TODO: Move into a function
+    process_http2_frames(&http2_conn, payload_length);
     return 0;
 }
 
