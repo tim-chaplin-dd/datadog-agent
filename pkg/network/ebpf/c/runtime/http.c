@@ -82,18 +82,27 @@ int socket__http2_filter(struct __sk_buff *skb) {
 
     const __u32 transaction_end = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
 
-    http2_conn.current_offset_in_request_fragment = 0;
+    __u32 current_offset_in_request_fragment = 0;
 #pragma unroll HTTP2_MAX_FRAMES
     // Iterate till max frames to avoid high connection rate.
     for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        if (http2_conn.current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE >= transaction_end) {
+        if (current_offset_in_request_fragment >= transaction_end) {
             break;
         }
 
-        if (!read_http2_frame_header(http2_conn.request_fragment + http2_conn.current_offset_in_request_fragment, transaction_end - http2_conn.current_offset_in_request_fragment, &current_frame)){
+        if (current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE >= transaction_end) {
             break;
         }
-        http2_conn.current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+
+        if (!read_http2_frame_header(&http2_conn.request_fragment[current_offset_in_request_fragment], HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+            break;
+        }
+        current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+
+        if (current_frame.type != kHeadersFrame) {
+            current_offset_in_request_fragment += (__u32)current_frame.length;
+            continue;
+        }
     }
     return 0;
 }

@@ -10,7 +10,6 @@ typedef struct {
     char request_fragment[HTTP2_BUFFER_SIZE];
 
     conn_tuple_t tup;
-    __u32 current_offset_in_request_fragment;
 } http2_connection_t;
 
 #endif
