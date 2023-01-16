@@ -9,6 +9,7 @@
 package http
 
 import (
+	"fmt"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode/runtime"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/process/statsd"
@@ -30,5 +31,6 @@ func getCFlags(config *config.Config) []string {
 	if config.BPFDebug {
 		cflags = append(cflags, "-DDEBUG=1")
 	}
+	fmt.Println(cflags)
 	return cflags
 }

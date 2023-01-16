@@ -442,31 +442,28 @@ static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http
 // This function filters the needed frames from the http2 session.
 static __always_inline void process_http2_frames(http2_connection_t* http2_conn, __u32 payload_length) {
     struct http2_frame current_frame = {};
-    const __u32 transaction_size = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
-    char *current_frag_location;
+    const __u32 transaction_end = payload_length < HTTP2_BUFFER_SIZE ? (payload_length - 1) : (HTTP2_BUFFER_SIZE - 1);
+//    char *current_frag_location;
 
 #pragma unroll HTTP2_MAX_FRAMES
     // Iterate till max frames to avoid high connection rate.
     for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        if (http2_conn->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > transaction_size) {
-            break;
-        }
-        if (http2_conn->current_offset_in_request_fragment > HTTP2_BUFFER_SIZE) {
+        if (http2_conn->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > transaction_end) {
             break;
         }
 
-        current_frag_location = &http2_conn->request_fragment[http2_conn->current_offset_in_request_fragment];
-        if (!read_http2_frame_header(current_frag_location, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+//        current_frag_location = &http2_conn->request_fragment[http2_conn->current_offset_in_request_fragment];
+        if (!read_http2_frame_header(http2_conn->request_fragment + http2_conn->current_offset_in_request_fragment, transaction_end - http2_conn->current_offset_in_request_fragment, &current_frame)){
             break;
         }
         http2_conn->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
-
-        // TODO: BUG: we might never upload request
-        // Filter all types of frames except header frame.
-        if (current_frame.type != kHeadersFrame) {
-            http2_conn->current_offset_in_request_fragment += current_frame.length;
-            continue;
-        }
+//
+//        // TODO: BUG: we might never upload request
+//        // Filter all types of frames except header frame.
+//        if (current_frame.type != kHeadersFrame) {
+//            http2_conn->current_offset_in_request_fragment += current_frame.length;
+//            continue;
+//        }
 
 //        // Verify size of pos with max of XX not bigger then the packet.
 //        if (http2_transaction->current_offset_in_request_fragment + (__u32)current_frame.length > skb->len) {

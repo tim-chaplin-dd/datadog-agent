@@ -145,14 +145,15 @@ int socket__http2_filter(struct __sk_buff *skb) {
     // our request fragment. Furthermore, it is unlikely that we will have any frame attached to the preface.
     read_into_buffer_skb_http2((char *)http2_conn->request_fragment, skb, &skb_info);
 
-//    const __u32 payload_length = skb->len - skb_info.data_off;
-//    // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) preface
-//    if (is_http2_preface(http2_conn->request_fragment, payload_length)) {
-//        // Update the position to be after the magic.
-//        http2_conn->current_offset_in_request_fragment += HTTP2_MARKER_SIZE;
-//    }
+    const __u32 payload_length = skb->len - skb_info.data_off;
+    // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) preface
+    if (is_http2_preface(http2_conn->request_fragment, payload_length)) {
+        // Update the position to be after the magic.
+        //http2_conn->current_offset_in_request_fragment += HTTP2_MARKER_SIZE;
+        return 0;
+    }
 
-//    process_http2_frames(http2_conn, payload_length);
+    process_http2_frames(http2_conn, payload_length);
     return 0;
 }
 
