@@ -16,7 +16,8 @@
 #include "ip.h"
 
 /* thread_struct id too big for allocation on stack in eBPF function, we use an array as a heap allocator */
-//BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_transaction_t, 1)
+// Used to overcome "misaligned stack access" when reading from the fragment.
+BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_connection_t, 1)
 
 /* This map holds one entry per CPU storing state associated to current http batch*/
 BPF_PERCPU_ARRAY_MAP(http2_batch_state, __u32, http_batch_state_t, 1)
@@ -439,52 +440,31 @@ static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http
 }
 
 // This function filters the needed frames from the http2 session.
-static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, __u32 payload_length) {
+static __always_inline void process_http2_frames(http2_connection_t* http2_conn, __u32 payload_length) {
     struct http2_frame current_frame = {};
-    const __u32 transaction_size = sizeof(http2_transaction->request_fragment) < payload_length ? sizeof(http2_transaction->request_fragment): payload_length;
+    const __u32 transaction_size = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
+    char *current_frag_location;
 
 #pragma unroll HTTP2_MAX_FRAMES
     // Iterate till max frames to avoid high connection rate.
-    for (int i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-//        log_debug("[tasik2] the current spot in the http2_transaction->current_offset_in_request_fragment is %d", http2_transaction->current_offset_in_request_fragment);
-        if (http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > transaction_size) {
-//            log_debug("[tasik2] ----------");
-//            log_debug("[tasik2] skb len is%d", skb->len);
-//            log_debug("[tasik2] the fragment with the header size  is %d", http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE);
-//            log_debug("[tasik2] ----------");
-            return;
+    for (size_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
+        if (http2_conn->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > transaction_size) {
+            break;
+        }
+        if (http2_conn->current_offset_in_request_fragment > HTTP2_BUFFER_SIZE) {
+            break;
         }
 
-        if (!read_http2_frame_header(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
-            return;
+        current_frag_location = &http2_conn->request_fragment[http2_conn->current_offset_in_request_fragment];
+        if (!read_http2_frame_header(current_frag_location, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+            break;
         }
-        http2_transaction->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
-
-        // TODO: BUG: We are iterating over different frames, each frame can be associated with different stream.
-//        http2_transaction->stream_id = current_frame.stream_id;
-
-        // End of stream my apper in the data frame as well as the header frame.
-//        log_debug("[tasik2] ----------");
-//        log_debug("[tasik2] flag is %d", current_frame.flags);
-//        log_debug("[tasik2] length is %d", current_frame.length);
-//        log_debug("[tasik2] type is %d", current_frame.type);
-//        log_debug("[tasik2] ----------");
-
-        // TODO: we are handling streams, it is weird that we are having http2 transaction with a single "end of stream"
-//        if ((current_frame.type == kDataFrame || current_frame.type == kHeadersFrame) && ((current_frame.flags&1) == 1)){
-////           log_debug("[tasik2] *********--------- found end of stream in data frame!!!!");
-//            http2_transaction->end_of_stream = true;
-//        }
-
-        // TODO: BUG: we might never upload request
-        if (current_frame.length == 0) {
-            continue;
-        }
+        http2_conn->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
 
         // TODO: BUG: we might never upload request
         // Filter all types of frames except header frame.
         if (current_frame.type != kHeadersFrame) {
-            http2_transaction->current_offset_in_request_fragment += current_frame.length;
+            http2_conn->current_offset_in_request_fragment += current_frame.length;
             continue;
         }
 

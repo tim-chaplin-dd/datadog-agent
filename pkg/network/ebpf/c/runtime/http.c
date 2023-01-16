@@ -67,26 +67,92 @@ static __always_inline bool http2_marker_prefix(const char* buf, __u32 buf_size)
     return match;
 }
 
+// This function is used for the socket-filter HTTP monitoring
+static __always_inline void read_into_buffer_skb_http2(char *buffer, struct __sk_buff *skb, skb_info_t *info) {
+    u64 offset = (u64)info->data_off;
+
+#define BLK_SIZE (16)
+    const u32 len = HTTP2_BUFFER_SIZE < (skb->len - (u32)offset) ? (u32)offset + HTTP2_BUFFER_SIZE : skb->len;
+
+    unsigned i = 0;
+
+#pragma unroll(HTTP2_BUFFER_SIZE / BLK_SIZE)
+    for (; i < (HTTP2_BUFFER_SIZE / BLK_SIZE); i++) {
+        if (offset + BLK_SIZE - 1 >= len) { break; }
+
+        bpf_skb_load_bytes_with_telemetry(skb, offset, &buffer[i * BLK_SIZE], BLK_SIZE);
+        offset += BLK_SIZE;
+    }
+
+    // This part is very hard to write in a loop and unroll it.
+    // Indeed, mostly because of older kernel verifiers, we want to make sure the offset into the buffer is not
+    // stored on the stack, so that the verifier is able to verify that we're not doing out-of-bound on
+    // the stack.
+    // Basically, we should get a register from the code block above containing an fp relative address. As
+    // we are doing `buffer[0]` here, there is not dynamic computation on that said register after this,
+    // and thus the verifier is able to ensure that we are in-bound.
+    void *buf = &buffer[i * BLK_SIZE];
+    if (i * BLK_SIZE >= HTTP2_BUFFER_SIZE) {
+        return;
+    } else if (offset + 14 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 15);
+    } else if (offset + 13 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 14);
+    } else if (offset + 12 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 13);
+    } else if (offset + 11 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 12);
+    } else if (offset + 10 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 11);
+    } else if (offset + 9 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 10);
+    } else if (offset + 8 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 9);
+    } else if (offset + 7 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 8);
+    } else if (offset + 6 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 7);
+    } else if (offset + 5 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 6);
+    } else if (offset + 4 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 5);
+    } else if (offset + 3 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 4);
+    } else if (offset + 2 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 3);
+    } else if (offset + 1 < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 2);
+    } else if (offset < len) {
+        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 1);
+    }
+}
+
 SEC("socket/http2_filter")
 int socket__http2_filter(struct __sk_buff *skb) {
-    http2_connection_t http2_conn = {};
+    const __u32 zero = 0;
+    http2_connection_t *http2_conn = bpf_map_lookup_elem(&http2_trans_alloc, &zero);
+    if (http2_conn == NULL) {
+        return 0;
+    }
+    bpf_memset(http2_conn, 0, sizeof(http2_connection_t));
+
     skb_info_t skb_info;
-    if (!read_conn_tuple_skb(skb, &skb_info, &http2_conn.tup)) {
+    if (!read_conn_tuple_skb(skb, &skb_info, &http2_conn->tup)) {
         return 0;
     }
 
     // TODO: If we are reading a preface, then we should skip the first 24 characters, as we are "losing" 24 bytes in
     // our request fragment. Furthermore, it is unlikely that we will have any frame attached to the preface.
-    read_into_buffer_skb((char *)http2_conn.request_fragment, skb, &skb_info);
+    read_into_buffer_skb_http2((char *)http2_conn->request_fragment, skb, &skb_info);
 
-    const __u32 payload_length = skb->len - skb_info.data_off;
-    // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) preface
-    if (is_http2_preface(http2_conn.request_fragment, payload_length)) {
-        // Update the position to be after the magic.
-        http2_conn.current_offset_in_request_fragment += HTTP2_MARKER_SIZE;
-    }
+//    const __u32 payload_length = skb->len - skb_info.data_off;
+//    // Check if the current buf is the http2 magic (* HTTP/2.0\r\n\r\nSM\r\n\r\n) preface
+//    if (is_http2_preface(http2_conn->request_fragment, payload_length)) {
+//        // Update the position to be after the magic.
+//        http2_conn->current_offset_in_request_fragment += HTTP2_MARKER_SIZE;
+//    }
 
-//    process_http2_frames(&http2_conn, payload_length);
+//    process_http2_frames(http2_conn, payload_length);
     return 0;
 }
 
