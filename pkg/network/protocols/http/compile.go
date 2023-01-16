@@ -22,7 +22,7 @@ func getRuntimeCompiledHTTP(config *config.Config) (runtime.CompiledOutput, erro
 }
 
 func getCFlags(config *config.Config) []string {
-	cflags := []string{"-g"}
+	cflags := []string{"-gdwarf", "-ggdb", "-g"}
 
 	if config.CollectIPv6Conns {
 		cflags = append(cflags, "-DFEATURE_IPV6_ENABLED")

@@ -16,7 +16,7 @@
 #include "ip.h"
 
 /* thread_struct id too big for allocation on stack in eBPF function, we use an array as a heap allocator */
-BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_transaction_t, 1)
+//BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_transaction_t, 1)
 
 /* This map holds one entry per CPU storing state associated to current http batch*/
 BPF_PERCPU_ARRAY_MAP(http2_batch_state, __u32, http_batch_state_t, 1)
@@ -243,23 +243,24 @@ static __always_inline __u64 read_var_int(http2_transaction_t* http2_transaction
 }
 
 static __always_inline bool classify_static_value(http2_transaction_t* http2_transaction, static_table_value* static_value){
-     header_value value = static_value->value;
-     header_key name = static_value->name;
+    header_value value = static_value->value;
+    header_key name = static_value->name;
 
-     if ((name == kMethod) && (value == kPOST)){
+    // TODO: BUG: the value of request_method should be consistent with the user mode. Check http module for reference.
+    if ((name == kMethod) && (value == kPOST)){
         http2_transaction->request_method = value;
         http2_transaction->packet_type = 2; // this will be request and we need to make it better
         return true;
-     }
-     if (value == kHTTP) {
+    }
+    if (value == kHTTP) {
         http2_transaction->schema = value;
         return true;
-     }
-     if ((value <= k500) && (value >= k200)) {
+    }
+    if ((value <= k500) && (value >= k200)) {
         http2_transaction->packet_type = 3; // this will be response type
         http2_transaction->response_status_code = value;
         return true;
-     }
+    }
 
      return false;
 }
@@ -267,41 +268,41 @@ static __always_inline bool classify_static_value(http2_transaction_t* http2_tra
 // parse_field_indexed is handling the case which the header frame is part of the static table.
 static __always_inline void parse_field_indexed(http2_transaction_t* http2_transaction){
      __u64 index = read_var_int(http2_transaction, 7);
-     // if the index is smaller then 61 we will be in static table.
-     bool found = false;
 
     // we search the index in the static table
     static_table_value* static_value = bpf_map_lookup_elem(&http2_static_table, &index);
     if (static_value != NULL) {
-        found = classify_static_value(http2_transaction, static_value);
+        classify_static_value(http2_transaction, static_value);
+        return;
     }
 
-    // if we could not find the index in the static table
-    if (!found) {
-        __u64 *global_counter = bpf_map_lookup_elem(&http2_dynamic_counter_table, &http2_transaction->old_tup);
-        if (global_counter != NULL) {
-            // we change the index to fit our internal dynamic table implementation index.
-            // the index is starting from 1 so we decrease 62 in order to be equal to the given index.
-            __u64 new_index = *global_counter - (index - 62);
-            dynamic_table_index dynamic_index = {};
-            dynamic_index.index = new_index;
-            dynamic_index.old_tup = http2_transaction->old_tup;
-
-            dynamic_table_value *dynamic_value_new = bpf_map_lookup_elem(&http2_dynamic_table, &dynamic_index);
-            if (dynamic_value_new != NULL) {
-                // index 5 represents the :path header - from dynamic table
-                if ((dynamic_value_new->index == 5) && (sizeof(dynamic_value_new->value.buffer)>0)){
-                    bpf_memcpy(http2_transaction->path, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
-                    http2_transaction->path_size = dynamic_value_new->value.string_len;
-                }
-
-                // index 1 represents the :path header - from dynamic table
-                if ((dynamic_value_new->index == 1) && (sizeof(dynamic_value_new->value.buffer)>0)){
-                    bpf_memcpy(http2_transaction->authority, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
-                }
-            }
-        }
+    __u64 *global_counter = bpf_map_lookup_elem(&http2_dynamic_counter_table, &http2_transaction->old_tup);
+    if (global_counter == NULL) {
+        return;
     }
+
+    // we change the index to fit our internal dynamic table implementation index.
+    // the index is starting from 1 so we decrease 62 in order to be equal to the given index.
+    __u64 new_index = *global_counter - (index - 62);
+    dynamic_table_index dynamic_index = {};
+    dynamic_index.index = new_index;
+    dynamic_index.old_tup = http2_transaction->old_tup;
+
+    dynamic_table_value *dynamic_value_new = bpf_map_lookup_elem(&http2_dynamic_table, &dynamic_index);
+    if (dynamic_value_new == NULL) {
+        return;
+    }
+
+    // index 5 represents the :path header - from dynamic table
+    if ((dynamic_value_new->index == 5) && (sizeof(dynamic_value_new->value.buffer)>0)){
+        bpf_memcpy(http2_transaction->path, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
+        http2_transaction->path_size = dynamic_value_new->value.string_len;
+    }
+
+    // index 1 represents the :path header - from dynamic table
+//    if ((dynamic_value_new->index == 1) && (sizeof(dynamic_value_new->value.buffer)>0)){
+//        bpf_memcpy(http2_transaction->authority, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
+//    }
 }
 
 // readString decoded string an hpack string from payload.
@@ -312,17 +313,17 @@ static __always_inline void parse_field_indexed(http2_transaction_t* http2_trans
 // strings past the MAX_HEADER_LIST_SIZE are ignored, but the server
 // is returning an error anyway, and because they're not indexed, the error
 // won't affect the decoding state.
-static __always_inline bool read_string(http2_transaction_t* http2_transaction, __u32 current_offset_in_request_fragment, __u64 *out_str_len, size_t payload_size){
+// TODO: Improve name or simplify the code.
+static __always_inline void read_string(http2_transaction_t* http2_transaction, __u32 current_offset_in_request_fragment, __u64 *out_str_len, size_t payload_size){
     // need to make sure that I am right but it seems like this part is interesting for headers which are not interesting
     // for as for example te:trailers, if so we may consider not supporting this part of the code in order to avoid
     // complexity and drop each index which is not interesting for us.
     *out_str_len = read_var_int(http2_transaction, 7);
-    return true;
 }
 
 static __always_inline void update_current_offset(http2_transaction_t* http2_transaction, __u64 str_len, size_t payload_size){
-    bool ok = read_string(http2_transaction, 6, &str_len, payload_size);
-    if (!ok && str_len <= 0){
+    read_string(http2_transaction, 6, &str_len, payload_size);
+    if (str_len <= 0){
         return;
     }
 
@@ -348,49 +349,7 @@ static __always_inline void parse_field_literal(http2_transaction_t* http2_trans
     dynamic_table_value dynamic_value = {};
     dynamic_table_index dynamic_index = {};
     static_table_value *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
-    if (static_value != NULL) {
-        if (index_type) {
-            dynamic_value.index = static_value->name;
-        }
-
-        __u64 str_len = 0;
-        bool ok = read_string(http2_transaction, 6, &str_len, payload_size);
-        if (!ok && str_len <= 0){
-            return;
-        }
-
-        if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
-            return ;
-        }
-
-        char *beginning = http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment;
-        // TODO: use const __u64 size11 = str_len < HTTP2_MAX_PATH_LEN ? str_len : HTTP2_MAX_PATH_LEN;
-
-        // create the new dynamic value which will be added to the internal table.
-        bpf_memcpy(dynamic_value.value.buffer, beginning, HTTP2_MAX_PATH_LEN);
-        dynamic_value.value.string_len = str_len;
-        dynamic_value.index = index;
-
-        // create the new dynamic index which is bashed on the counter and the conn_tup.
-        dynamic_index.index = counter;
-        dynamic_index.old_tup = http2_transaction->old_tup;
-
-        bpf_map_update_elem(&http2_dynamic_table, &dynamic_index, &dynamic_value, BPF_ANY);
-
-        http2_transaction->current_offset_in_request_fragment += str_len;
-
-        // index 5 represents the :path header - from static table
-        if ((index == 5) && (sizeof(dynamic_value.value.buffer)>0)){
-            bpf_memcpy(http2_transaction->path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
-            http2_transaction->path_size = str_len;
-        }
-
-        // index 1 represents the :authority header - from static table
-        if ((index == 1) && (sizeof(dynamic_value.value.buffer)>0)){
-            bpf_memcpy(http2_transaction->authority, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
-        }
-        }
-    else {
+    if (static_value == NULL) {
         __u64 str_len = 0;
         update_current_offset(http2_transaction, str_len, payload_size);
 
@@ -399,28 +358,66 @@ static __always_inline void parse_field_literal(http2_transaction_t* http2_trans
         if (index == 0) {
             update_current_offset(http2_transaction, str_len, payload_size);
         }
+        return;
+    }
+
+    if (index_type) {
+        dynamic_value.index = static_value->name;
+    }
+
+    __u64 str_len = 0;
+    read_string(http2_transaction, 6, &str_len, payload_size);
+    if (str_len <= 0){
+        return;
+    }
+
+    if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+        return ;
+    }
+
+    char *beginning = http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment;
+    // TODO: use const __u64 size11 = str_len < HTTP2_MAX_PATH_LEN ? str_len : HTTP2_MAX_PATH_LEN;
+
+    // create the new dynamic value which will be added to the internal table.
+    bpf_memcpy(dynamic_value.value.buffer, beginning, HTTP2_MAX_PATH_LEN);
+    dynamic_value.value.string_len = str_len;
+    dynamic_value.index = index;
+
+    // create the new dynamic index which is bashed on the counter and the conn_tup.
+    dynamic_index.index = counter;
+    dynamic_index.old_tup = http2_transaction->old_tup;
+
+    bpf_map_update_elem(&http2_dynamic_table, &dynamic_index, &dynamic_value, BPF_ANY);
+
+    http2_transaction->current_offset_in_request_fragment += str_len;
+
+    // index 5 represents the :path header - from static table
+    if ((index == 5) && (sizeof(dynamic_value.value.buffer)>0)){
+        bpf_memcpy(http2_transaction->path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
+        http2_transaction->path_size = str_len;
     }
 }
 
 // parse_header_field_repr is handling the header frame by bit calculation and is storing the needed data for our
 // internal hpack algorithm.
-static __always_inline void parse_header_field_repr(http2_transaction_t* http2_transaction, size_t payload_size, __u8 first_char) {
-    log_debug("[http2] parse_header_field_repr is in");
-    log_debug("[http2] first char %d", first_char);
+static __always_inline void parse_header_field_repr(http2_transaction_t* http2_transaction, size_t payload_size) {
+    __u8 first_char = http2_transaction->request_fragment[http2_transaction->current_offset_in_request_fragment];
+//    log_debug("[http2] parse_header_field_repr is in");
+//    log_debug("[http2] first char %d", first_char);
 
     if ((first_char&128) != 0) {
         // Indexed representation.
         // MSB bit set.
         // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
-        log_debug("[http2]first char %d & 128 != 0; calling parse_field_indexed", first_char);
-        parse_field_indexed(http2_transaction);
-        }
+//        log_debug("[http2]first char %d & 128 != 0; calling parse_field_indexed", first_char);
+//        parse_field_indexed(http2_transaction);
+    }
     if ((first_char&192) == 64) {
         // 6.2.1 Literal Header Field with Incremental Indexing
         // top two bits are 10
         // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
-        log_debug("[http2] first char %d & 192 == 64; calling parse_field_literal", first_char);
-        parse_field_literal(http2_transaction, true, payload_size, 6);
+//        log_debug("[http2] first char %d & 192 == 64; calling parse_field_literal", first_char);
+//        parse_field_literal(http2_transaction, true, payload_size, 6);
     }
 }
 
@@ -428,89 +425,82 @@ static __always_inline void parse_header_field_repr(http2_transaction_t* http2_t
 static __always_inline bool decode_http2_headers_frame(http2_transaction_t* http2_transaction, __u32 payload_size) {
     log_debug("[http2] decode_http2_headers_frame is in");
 
+//    barrier();
 // need to come back and understand how many times I will iterate over the current frame
-//#pragma unroll
-    for (int i = 0; i < HTTP2_MAX_HEADERS_COUNT; i++) {
+#pragma unroll (HTTP2_MAX_HEADERS_COUNT)
+    for (__u32 i = 0; i < HTTP2_MAX_HEADERS_COUNT; i++) {
         if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
-                return false;
+            return false;
         }
-        __u8 first_char = *(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment);
-        parse_header_field_repr(http2_transaction, payload_size, first_char);
+//        parse_header_field_repr(http2_transaction, payload_size);
     }
 
     return true;
 }
 
 // This function filters the needed frames from the http2 session.
-static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, struct __sk_buff *skb) {
+static __always_inline void process_http2_frames(http2_transaction_t* http2_transaction, __u32 payload_length) {
     struct http2_frame current_frame = {};
+    const __u32 transaction_size = sizeof(http2_transaction->request_fragment) < payload_length ? sizeof(http2_transaction->request_fragment): payload_length;
 
-#pragma unroll
+#pragma unroll HTTP2_MAX_FRAMES
     // Iterate till max frames to avoid high connection rate.
-    for (uint32_t i = 0; i < HTTP2_MAX_FRAMES; ++i) {
-        log_debug("[tasik2] the current spot in the http2_transaction->current_offset_in_request_fragment is %d", http2_transaction->current_offset_in_request_fragment);
-        if (http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > skb->len) {
-            log_debug("[tasik2] ----------");
-            log_debug("[tasik2] skb len is%d", skb->len);
-            log_debug("[tasik2] the fragment with the header size  is %d", http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE);
-            log_debug("[tasik2] ----------");
-          return;
-        }
-
-        // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+    for (int i = 0; i < HTTP2_MAX_FRAMES; ++i) {
+//        log_debug("[tasik2] the current spot in the http2_transaction->current_offset_in_request_fragment is %d", http2_transaction->current_offset_in_request_fragment);
+        if (http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE > transaction_size) {
+//            log_debug("[tasik2] ----------");
+//            log_debug("[tasik2] skb len is%d", skb->len);
+//            log_debug("[tasik2] the fragment with the header size  is %d", http2_transaction->current_offset_in_request_fragment + HTTP2_FRAME_HEADER_SIZE);
+//            log_debug("[tasik2] ----------");
             return;
         }
 
         if (!read_http2_frame_header(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
             return;
         }
-
         http2_transaction->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
 
-        http2_transaction->stream_id = current_frame.stream_id;
+        // TODO: BUG: We are iterating over different frames, each frame can be associated with different stream.
+//        http2_transaction->stream_id = current_frame.stream_id;
 
         // End of stream my apper in the data frame as well as the header frame.
-        log_debug("[tasik2] ----------");
-        log_debug("[tasik2] flag is %d", current_frame.flags);
-        log_debug("[tasik2] length is %d", current_frame.length);
-        log_debug("[tasik2] type is %d", current_frame.type);
-        log_debug("[tasik2] ----------");
+//        log_debug("[tasik2] ----------");
+//        log_debug("[tasik2] flag is %d", current_frame.flags);
+//        log_debug("[tasik2] length is %d", current_frame.length);
+//        log_debug("[tasik2] type is %d", current_frame.type);
+//        log_debug("[tasik2] ----------");
 
-        if (current_frame.type == kDataFrame && ((current_frame.flags&1) == 1)){
-           log_debug("[tasik2] *********--------- found end of stream in data frame!!!!");
-           http2_transaction->end_of_stream = true;
-        }
+        // TODO: we are handling streams, it is weird that we are having http2 transaction with a single "end of stream"
+//        if ((current_frame.type == kDataFrame || current_frame.type == kHeadersFrame) && ((current_frame.flags&1) == 1)){
+////           log_debug("[tasik2] *********--------- found end of stream in data frame!!!!");
+//            http2_transaction->end_of_stream = true;
+//        }
 
+        // TODO: BUG: we might never upload request
         if (current_frame.length == 0) {
             continue;
         }
 
+        // TODO: BUG: we might never upload request
         // Filter all types of frames except header frame.
         if (current_frame.type != kHeadersFrame) {
-            http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
+            http2_transaction->current_offset_in_request_fragment += current_frame.length;
             continue;
         }
 
-        // End of stream my apper in the header frame as well.
-        if ((current_frame.flags&1) == 1) {
-           log_debug("[tasik2] *********--------- found end of stream in header frame!!!!");
-           http2_transaction->end_of_stream = true;
-//           log_debug("[http3] ********* End of stream flag2 was found for stream id: %d!!! *********", current_frame.stream_id, http2_transaction->stream_id);
-        }
-
-        // Verify size of pos with max of XX not bigger then the packet.
-        if (http2_transaction->current_offset_in_request_fragment + (__u32)current_frame.length > skb->len) {
-            return;
-        }
+//        // Verify size of pos with max of XX not bigger then the packet.
+//        if (http2_transaction->current_offset_in_request_fragment + (__u32)current_frame.length > skb->len) {
+//            return;
+//        }
 
         // Load the current frame into http2_frame strct in order to filter the needed frames.
-        if (!decode_http2_headers_frame(http2_transaction, current_frame.length)){
-            log_debug("[http2] unable to read http2 header frame");
-            return;
-        }
+//        if (!decode_http2_headers_frame(http2_transaction, current_frame.length)){
+//            log_debug("[http2] unable to read http2 header frame");
+//            return;
+//        }
 
-        http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
+        // TODO: BUG: we are updating the offset during decode_http2_headers_frame; The solution is to remove.
+        // http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
     }
 }
 

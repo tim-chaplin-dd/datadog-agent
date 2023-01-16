@@ -5,7 +5,7 @@
 
 // A limit of max frames we will upload from a single connection to the user mode.
 // NOTE: we may need to revisit this const if we need to capture more connections.
-#define HTTP2_MAX_FRAMES 10
+#define HTTP2_MAX_FRAMES 5
 
 // A limit of max headers frames which we except to see in the request/response.
 // NOTE: we may need to change the max size.
@@ -101,6 +101,18 @@ typedef enum
     HTTP2_PATCH
 } http2_method_t;
 
+typedef struct {
+    conn_tuple_t tup;
+    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
+    __u32 current_offset_in_request_fragment;
+} http2_connection_t;
+
+typedef struct {
+    conn_tuple_t tup;
+    __u8  stream_id;
+    bool end_of_stream;
+} http2_stream_t;
+
 // HTTP2 transaction information associated to a certain socket (tuple_t)
 typedef struct {
     conn_tuple_t old_tup;
@@ -114,17 +126,20 @@ typedef struct {
 
     char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
 
-    __u16 response_status_code;
-    __u16 owned_by_src_port;
-
-    bool end_of_stream;
+    __u64  path_size;
     __u8  request_method;
     __u8  packet_type;
     __u8  schema;
     __u8  stream_id;
-    __u64  path_size;
+
     char path[32] __attribute__ ((aligned (8)));
-    char authority[32] __attribute__ ((aligned (8)));
+
+    __u16 response_status_code;
+    __u16 owned_by_src_port;
+
+    bool end_of_stream;
+
+//    char authority[32] __attribute__ ((aligned (8)));
 } http2_transaction_t;
 
 // This struct is used in the map lookup that returns the active batch for a certain CPU core
