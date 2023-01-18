@@ -1,9 +1,6 @@
 #ifndef __HTTP2_DECODING_H
 #define __HTTP2_DECODING_H
 
-// Checkout https://datatracker.ietf.org/doc/html/rfc7540 under "Frame Format" section
-#define HTTP2_SETTINGS_SIZE 6
-
 #include "bpf_builtins.h"
 #include "bpf_helpers.h"
 #include "map-defs.h"
@@ -14,10 +11,13 @@
 #include "protocol-classification-defs.h"
 #include "bpf_telemetry.h"
 #include "ip.h"
+#include "protocols/events.h"
 
 /* thread_struct id too big for allocation on stack in eBPF function, we use an array as a heap allocator */
 BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_transaction_t, 1)
 BPF_PERCPU_ARRAY_MAP(http_trans_alloc, __u32, http_transaction_t, 1)
+
+USM_EVENTS_INIT(http2, http2_transaction_t, HTTP2_BATCH_SIZE);
 
 static __always_inline http2_transaction_t *http2_fetch_state(http2_transaction_t *http2, http2_packet_t packet_type) {
     if (packet_type == HTTP_PACKET_UNKNOWN) {
@@ -49,33 +49,46 @@ static __always_inline void http2_update_seen_before(http2_transaction_t *http2,
     http2->tcp_seq = skb_info->tcp_seq;
 }
 
-static __always_inline void http2_begin_request(http2_transaction_t *http2, http2_method_t method, char *buffer) {
-//    http2->request_method = method;
+static __always_inline void http2_begin_request(http2_transaction_t *http2) {
+    if (http2->request_method == 2) {
+        http2->request_method = HTTP2_GET;
+    } else if (http2->request_method == 3) {
+        http2->request_method = HTTP2_POST;
+    }
     http2->request_started = bpf_ktime_get_ns();
     http2->response_last_seen = 0;
-    bpf_memcpy(&http2->request_fragment, buffer, HTTP2_BUFFER_SIZE);
+    http2->response_status_code = 0;
+}
+
+static __always_inline void http2_begin_response(http2_transaction_t *http2_stack, __u16 status_code) {
+    switch(status_code) {
+    case k200:
+        http2_stack->response_status_code = 200;
+        break;
+    case k204:
+        http2_stack->response_status_code = 204;
+        break;
+    case k206:
+        http2_stack->response_status_code = 206;
+        break;
+    case k400:
+        http2_stack->response_status_code = 400;
+        break;
+    case k500:
+        http2_stack->response_status_code = 500;
+        break;
+    }
 }
 
 static __always_inline int http2_responding(http2_transaction_t *http2) {
     return (http2 != NULL && http2->response_status_code != 0);
 }
 
-static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_info_t *skb_info,__u64 tags) {
+static __always_inline int http2_process(http2_transaction_t* http2_stack, skb_info_t *skb_info,__u64 tags) {
     http2_packet_t packet_type = HTTP2_PACKET_UNKNOWN;
-    http2_method_t method = HTTP2_METHOD_UNKNOWN;
-    __u64 response_code;
 
-    if (http2_stack->packet_type > 0) {
+    if (http2_stack->packet_type != 0) {
         packet_type = http2_stack->packet_type;
-    }
-
-    if (packet_type != 0){
-        log_debug("[http2] ----------------------------------\n");
-        log_debug("[http2] The method is %d\n", method);
-        log_debug("[http2] The packet_type is %d\n", packet_type);
-        log_debug("[http2] the response status code is %d\n", http2_stack->response_status_code);
-        log_debug("[http2] the end of stream is %d\n", http2_stack->end_of_stream);
-        log_debug("[http2] ----------------------------------\n");
     }
 
     if (packet_type == 3) {
@@ -91,68 +104,19 @@ static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_
     }
 
     if (packet_type == HTTP2_REQUEST) {
-        log_debug("[http2] http2_process request: type=%d method=%d\n", packet_type, method);
-        http2_begin_request(http2, method, (char *)http2_stack->request_fragment);
+        http2_begin_request(http2);
         http2_update_seen_before(http2, skb_info);
     } else if (packet_type == HTTP2_RESPONSE) {
-        log_debug("[http2] http2_begin_response: htx=%llx status=%d\n", http2, http2->response_status_code);
+        http2_begin_response(http2, http2_stack->response_status_code);
         http2_update_seen_before(http2, skb_info);
     }
 
+    if (http2_responding(http2_stack)) {
+        http2->response_last_seen = bpf_ktime_get_ns();
+    }
+
     if (http2_stack->response_status_code > 0) {
-        http2_transaction_t *trans = bpf_map_lookup_elem(&http2_in_flight, &http2->old_tup);
-        if (trans != NULL) {
-            const __u32 zero = 0;
-            http_transaction_t *http = bpf_map_lookup_elem(&http_trans_alloc, &zero);
-            if (http == NULL) {
-                return 0;
-            }
-            bpf_memset(http, 0, sizeof(http_transaction_t));
-            bpf_memcpy(&http->tup, &trans->tup, sizeof(conn_tuple_t));
-
-            http->request_fragment[0] = 'z';
-            http->request_fragment[1] = http2->path_size;
-            bpf_memcpy(&http->request_fragment[8], trans->path, HTTP2_MAX_PATH_LEN);
-
-            // todo: take it out to a function?!
-            if (trans->request_method == 2) {
-                log_debug("[slavin] found http2 get");
-                method = HTTP2_GET;
-            } else if (trans->request_method == 3) {
-                log_debug("[slavin] found http2 post");
-                method = HTTP2_POST;
-            }
-
-            // todo: take it out to a function and add all the other options as well.
-            switch(http2_stack->response_status_code) {
-            case k200:
-                response_code = 200;
-                break;
-            case k204:
-                response_code = 204;
-                break;
-            case k206:
-                response_code = 206;
-                break;
-            case k400:
-                response_code = 400;
-                break;
-            case k500:
-                response_code = 500;
-                break;
-            }
-
-            http->response_status_code = response_code;
-            http->request_started = trans->request_started;
-            http->request_method = method;
-            http->response_last_seen = bpf_ktime_get_ns();
-            http->owned_by_src_port = trans->owned_by_src_port;
-            http->tcp_seq = trans->tcp_seq;
-            http->tags = trans->tags;
-
-            http_batch_enqueue(http);
-//            bpf_map_delete_elem(&http2_in_flight, &http2_stack->tup);
-        }
+        http2_batch_enqueue(http2);
     }
 
     return 0;
@@ -226,7 +190,7 @@ static __always_inline void parse_field_indexed(http2_transaction_t* http2_trans
 
     // index 5 represents the :path header - from dynamic table
     if (dynamic_value_new->index == 5){
-        bpf_memcpy(http2_transaction->path, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
+        bpf_memcpy(http2_transaction->request_path, dynamic_value_new->value.buffer, HTTP2_MAX_PATH_LEN);
         http2_transaction->path_size = dynamic_value_new->value.string_len;
     }
 }
@@ -301,7 +265,7 @@ static __always_inline void parse_field_literal(http2_transaction_t* http2_trans
 
     // index 5 represents the :path header - from static table
     if (index == 5){
-        bpf_memcpy(http2_transaction->path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
+        bpf_memcpy(http2_transaction->request_path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
         http2_transaction->path_size = str_len;
     }
 }

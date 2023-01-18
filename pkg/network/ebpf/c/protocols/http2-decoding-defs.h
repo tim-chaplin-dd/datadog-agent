@@ -21,6 +21,8 @@
 // This determines the size of the payload fragment that is captured for each HTTP request
 #define HTTP2_BUFFER_SIZE (8 * 20)
 
+#define HTTP2_BATCH_SIZE 10
+
 typedef enum {
     kMethod = 2,
     kPath = 4,
@@ -103,7 +105,7 @@ typedef struct {
     __u8  packet_type;
     __u8  stream_id;
     __u64  path_size;
-    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
+    __u8 request_path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
 } http2_transaction_t;
 
 #endif
