@@ -74,36 +74,64 @@ typedef enum {
     HTTP2_POST,
 } http2_method_t;
 
+//// HTTP2 transaction information associated to a certain socket (tuple_t)
+//typedef struct {
+//    conn_tuple_t old_tup;
+//    conn_tuple_t tup;
+//    __u64 request_started;
+//    __u64 tags;
+//    __u64 response_last_seen;
+//
+//    __u32 tcp_seq;
+//    __u32 current_offset_in_request_fragment;
+//
+//    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
+//
+//    __u16 response_status_code;
+//    __u16 owned_by_src_port;
+//
+//    bool end_of_stream;
+//    __u8  request_method;
+//    __u8  packet_type;
+//    __u8  stream_id;
+//    __u64  path_size;
+//    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
+//} http2_transaction_t;
+
 typedef struct {
     conn_tuple_t tup;
-    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
-
-    char *frag_head;
-    char *frag_end;
-} http2_connection_t;
-
-// HTTP2 transaction information associated to a certain socket (tuple_t)
-typedef struct {
     conn_tuple_t old_tup;
-    conn_tuple_t tup;
-    __u64 request_started;
-    __u64 tags;
-    __u64 response_last_seen;
-
-    __u32 tcp_seq;
-    __u32 current_offset_in_request_fragment;
-
-    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
-
-    __u16 response_status_code;
     __u16 owned_by_src_port;
 
-    bool end_of_stream;
+    __u32 tcp_seq;
+
+    __u32 current_offset_in_request_fragment;
+    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
+} http2_connection_t;
+
+typedef struct {
+    conn_tuple_t tup;
+    __u16 owned_by_src_port; // ?
+
+    __u64 response_last_seen;
+    __u16 response_status_code;
+
+//    bool request_end_of_stream;
+//    bool response_end_of_stream;
+    __u8  end_of_stream;
+    // todo: should i remove it?
+    __u64 request_started;
+
+
     __u8  request_method;
-    __u8  packet_type;
     __u8  stream_id;
     __u64  path_size;
     char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
-} http2_transaction_t;
+} http2_stream_t;
+
+typedef struct {
+    conn_tuple_t tup;
+    __u8  stream_id;
+} http2_stream_key_t;
 
 #endif
