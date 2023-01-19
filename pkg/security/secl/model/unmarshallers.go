@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/DataDog/datadog-agent/pkg/security/secl/compiler/eval"
 )
@@ -80,12 +79,10 @@ func (e *Event) UnmarshalBinary(data []byte) (int, error) {
 
 	e.TimestampRaw = ByteOrder.Uint64(data[8:16])
 	e.Type = ByteOrder.Uint32(data[16:20])
-	if data[20] != 0 {
-		e.Async = true
-	} else {
-		e.Async = false
-	}
-	// 21-24: padding
+	e.Async = data[20] != 0
+	e.SavedByActivityDumps = data[21] != 0
+	e.IsActivityDumpSample = data[22] != 0
+	// padding 1 byte
 
 	return 24, nil
 }
@@ -167,7 +164,7 @@ func (e *Process) UnmarshalProcEntryBinary(data []byte) (int, error) {
 	read += 8
 
 	var ttyRaw [64]byte
-	SliceToArray(data[read:read+64], unsafe.Pointer(&ttyRaw))
+	SliceToArray(data[read:read+64], ttyRaw[:])
 	ttyName, err := UnmarshalString(ttyRaw[:], 64)
 	if err != nil {
 		return 0, err
@@ -178,7 +175,7 @@ func (e *Process) UnmarshalProcEntryBinary(data []byte) (int, error) {
 	read += 64
 
 	var commRaw [16]byte
-	SliceToArray(data[read:read+16], unsafe.Pointer(&commRaw))
+	SliceToArray(data[read:read+16], commRaw[:])
 	e.Comm, err = UnmarshalString(commRaw[:], 16)
 	if err != nil {
 		return 0, err
@@ -242,9 +239,12 @@ func (e *Process) UnmarshalBinary(data []byte) (int, error) {
 		return 0, ErrNotEnoughData
 	}
 
-	e.LinuxBinprm.FileEvent.Inode = ByteOrder.Uint64(data[read : read+8])
-	e.LinuxBinprm.FileEvent.MountID = ByteOrder.Uint32(data[read+8 : read+12])
-	e.LinuxBinprm.FileEvent.PathID = ByteOrder.Uint32(data[read+12 : read+16])
+	// TODO: Is there a better way to determine if there's no interpreter?
+	inode, mountID := ByteOrder.Uint64(data[read:read+8]), ByteOrder.Uint32(data[read+8:read+12])
+	if e.FileEvent.Inode != inode || e.FileEvent.MountID != mountID {
+		e.LinuxBinprm.FileEvent.Inode, e.LinuxBinprm.FileEvent.MountID = inode, mountID
+		e.LinuxBinprm.FileEvent.PathID = ByteOrder.Uint32(data[read+12 : read+16])
+	}
 
 	read += 16
 
@@ -302,18 +302,18 @@ func (e *InvalidateDentryEvent) UnmarshalBinary(data []byte) (int, error) {
 
 // UnmarshalBinary unmarshalls a binary representation of itself
 func (e *ArgsEnvsEvent) UnmarshalBinary(data []byte) (int, error) {
-	if len(data) < maxArgEnvSize+8 {
+	if len(data) < MaxArgEnvSize+8 {
 		return 0, ErrNotEnoughData
 	}
 
 	e.ID = ByteOrder.Uint32(data[0:4])
 	e.Size = ByteOrder.Uint32(data[4:8])
-	if e.Size > maxArgEnvSize {
-		e.Size = maxArgEnvSize
+	if e.Size > MaxArgEnvSize {
+		e.Size = MaxArgEnvSize
 	}
-	SliceToArray(data[8:maxArgEnvSize+8], unsafe.Pointer(&e.ValuesRaw))
+	SliceToArray(data[8:MaxArgEnvSize+8], e.ValuesRaw[:])
 
-	return maxArgEnvSize + 8, nil
+	return MaxArgEnvSize + 8, nil
 }
 
 // UnmarshalBinary unmarshalls a binary representation of itself
@@ -373,34 +373,37 @@ func (e *MkdirEvent) UnmarshalBinary(data []byte) (int, error) {
 }
 
 // UnmarshalBinary unmarshalls a binary representation of itself
-func (e *MountEvent) UnmarshalBinary(data []byte) (int, error) {
-	n, err := UnmarshalBinary(data, &e.SyscallEvent)
-	if err != nil {
-		return n, err
-	}
-
-	data = data[n:]
+func (m *Mount) UnmarshalBinary(data []byte) (int, error) {
 	if len(data) < 56 {
 		return 0, ErrNotEnoughData
 	}
 
-	e.MountID = ByteOrder.Uint32(data[0:4])
-	e.GroupID = ByteOrder.Uint32(data[4:8])
-	e.Device = ByteOrder.Uint32(data[8:12])
-	e.ParentMountID = ByteOrder.Uint32(data[12:16])
-	e.ParentInode = ByteOrder.Uint64(data[16:24])
-	e.RootInode = ByteOrder.Uint64(data[24:32])
-	e.RootMountID = ByteOrder.Uint32(data[32:36])
+	m.MountID = ByteOrder.Uint32(data[0:4])
+	m.GroupID = ByteOrder.Uint32(data[4:8])
+	m.Device = ByteOrder.Uint32(data[8:12])
+	m.ParentMountID = ByteOrder.Uint32(data[12:16])
+	m.ParentInode = ByteOrder.Uint64(data[16:24])
+	m.RootInode = ByteOrder.Uint64(data[24:32])
+	m.RootMountID = ByteOrder.Uint32(data[32:36])
+	m.BindSrcMountID = ByteOrder.Uint32(data[36:40])
 
-	// Notes: bytes 36 to 40 are used to pad the structure
-
-	SliceToArray(data[40:56], unsafe.Pointer(&e.FSTypeRaw))
-	e.FSType, err = UnmarshalString(e.FSTypeRaw[:], 16)
+	var err error
+	m.FSType, err = UnmarshalString(data[40:56], 16)
 	if err != nil {
 		return 0, err
 	}
 
 	return 56, nil
+}
+
+// UnmarshalBinary unmarshalls a binary representation of itself
+func (e *MountEvent) UnmarshalBinary(data []byte) (int, error) {
+	return UnmarshalBinary(data, &e.SyscallEvent, &e.Mount)
+}
+
+// UnmarshalBinary unmarshalls a binary representation of itself
+func (e *UnshareMountNSEvent) UnmarshalBinary(data []byte) (int, error) {
+	return e.Mount.UnmarshalBinary(data)
 }
 
 // UnmarshalBinary unmarshalls a binary representation of itself
@@ -476,7 +479,7 @@ func (e *SELinuxEvent) UnmarshalBinary(data []byte) (int, error) {
 
 // UnmarshalBinary unmarshalls a binary representation of itself, process_context_t kernel side
 func (p *PIDContext) UnmarshalBinary(data []byte) (int, error) {
-	if len(data) < 16 {
+	if len(data) < 24 {
 		return 0, ErrNotEnoughData
 	}
 
@@ -484,8 +487,9 @@ func (p *PIDContext) UnmarshalBinary(data []byte) (int, error) {
 	p.Tid = ByteOrder.Uint32(data[4:8])
 	p.NetNS = ByteOrder.Uint32(data[8:12])
 	p.IsKworker = ByteOrder.Uint32(data[12:16]) > 0
+	p.Inode = ByteOrder.Uint64(data[16:24])
 
-	return 16, nil
+	return 24, nil
 }
 
 // UnmarshalBinary unmarshalls a binary representation of itself
@@ -509,7 +513,7 @@ func (e *SetXAttrEvent) UnmarshalBinary(data []byte) (int, error) {
 	if len(data) < 200 {
 		return n, ErrNotEnoughData
 	}
-	SliceToArray(data[0:200], unsafe.Pointer(&e.NameRaw))
+	SliceToArray(data[0:200], e.NameRaw[:])
 
 	return n + 200, nil
 }
@@ -596,12 +600,11 @@ func UnmarshalBinary(data []byte, binaryUnmarshalers ...BinaryUnmarshaler) (int,
 
 // UnmarshalBinary unmarshalls a binary representation of itself
 func (e *MountReleasedEvent) UnmarshalBinary(data []byte) (int, error) {
-	if len(data) < 8 {
+	if len(data) < 4 {
 		return 0, ErrNotEnoughData
 	}
 
 	e.MountID = ByteOrder.Uint32(data[0:4])
-	e.DiscarderRevision = ByteOrder.Uint32(data[4:8])
 
 	return 8, nil
 }
@@ -833,13 +836,47 @@ func (e *CgroupTracingEvent) UnmarshalBinary(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	cursor := read
 
-	if len(data)-read < 8 {
+	read, err = e.Config.EventUnmarshalBinary(data[cursor:])
+	if err != nil {
+		return 0, err
+	}
+	cursor += read
+
+	if len(data)-cursor < 4 {
 		return 0, ErrNotEnoughData
 	}
 
-	e.TimeoutRaw = ByteOrder.Uint64(data[read : read+8])
-	return read + 8, nil
+	e.ConfigCookie = ByteOrder.Uint32(data[cursor : cursor+4])
+	return cursor + 4, nil
+}
+
+// EventUnmarshalBinary unmarshals a binary representation of itself
+func (adlc *ActivityDumpLoadConfig) EventUnmarshalBinary(data []byte) (int, error) {
+	if len(data) < 48 {
+		return 0, ErrNotEnoughData
+	}
+
+	eventMask := ByteOrder.Uint64(data[0:8])
+	for i := uint64(0); i < 64; i++ {
+		if eventMask&(1<<i) == (1 << i) {
+			adlc.TracedEventTypes = append(adlc.TracedEventTypes, EventType(i)+FirstDiscarderEventType)
+		}
+	}
+	adlc.Timeout = time.Duration(ByteOrder.Uint64(data[8:16]))
+	adlc.WaitListTimestampRaw = ByteOrder.Uint64(data[16:24])
+	adlc.StartTimestampRaw = ByteOrder.Uint64(data[24:32])
+	adlc.EndTimestampRaw = ByteOrder.Uint64(data[32:40])
+	adlc.Rate = ByteOrder.Uint32(data[40:44])
+	adlc.Paused = ByteOrder.Uint32(data[44:48])
+	return 48, nil
+}
+
+// UnmarshalBinary unmarshals a binary representation of itself
+func (adlc *ActivityDumpLoadConfig) UnmarshalBinary(data []byte) error {
+	_, err := adlc.EventUnmarshalBinary(data)
+	return err
 }
 
 // UnmarshalBinary unmarshalls a binary representation of itself
@@ -864,8 +901,8 @@ func (e *NetworkContext) UnmarshalBinary(data []byte) (int, error) {
 	}
 
 	var srcIP, dstIP [16]byte
-	SliceToArray(data[read:read+16], unsafe.Pointer(&srcIP))
-	SliceToArray(data[read+16:read+32], unsafe.Pointer(&dstIP))
+	SliceToArray(data[read:read+16], srcIP[:])
+	SliceToArray(data[read+16:read+32], dstIP[:])
 	e.Source.Port = binary.BigEndian.Uint16(data[read+32 : read+34])
 	e.Destination.Port = binary.BigEndian.Uint16(data[read+34 : read+36])
 	// padding 4 bytes
@@ -974,7 +1011,7 @@ func (e *BindEvent) UnmarshalBinary(data []byte) (int, error) {
 	}
 
 	var ipRaw [16]byte
-	SliceToArray(data[read:read+16], unsafe.Pointer(&ipRaw))
+	SliceToArray(data[read:read+16], ipRaw[:])
 	e.AddrFamily = ByteOrder.Uint16(data[read+16 : read+18])
 	e.Addr.Port = binary.BigEndian.Uint16(data[read+18 : read+20])
 

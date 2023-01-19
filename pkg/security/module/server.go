@@ -19,16 +19,17 @@ import (
 
 	"github.com/DataDog/datadog-go/v5/statsd"
 	easyjson "github.com/mailru/easyjson"
+	jwriter "github.com/mailru/easyjson/jwriter"
 	"go.uber.org/atomic"
 	"golang.org/x/time/rate"
 
 	"github.com/DataDog/datadog-agent/pkg/security/api"
 	"github.com/DataDog/datadog-agent/pkg/security/config"
-	"github.com/DataDog/datadog-agent/pkg/security/ebpf/probes"
-	seclog "github.com/DataDog/datadog-agent/pkg/security/log"
 	"github.com/DataDog/datadog-agent/pkg/security/metrics"
 	sprobe "github.com/DataDog/datadog-agent/pkg/security/probe"
+	"github.com/DataDog/datadog-agent/pkg/security/secl/model"
 	"github.com/DataDog/datadog-agent/pkg/security/secl/rules"
+	"github.com/DataDog/datadog-agent/pkg/security/seclog"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/version"
 )
@@ -45,6 +46,7 @@ type pendingMsg struct {
 // APIServer represents a gRPC server in charge of receiving events sent by
 // the runtime security system-probe module and forwards them to Datadog
 type APIServer struct {
+	api.UnimplementedSecurityModuleServer
 	msgs                 chan *api.SecurityEventMessage
 	processMsgs          chan *api.SecurityProcessEventMessage
 	activityDumps        chan *api.ActivityDumpStreamMessage
@@ -155,12 +157,6 @@ LOOP:
 	}
 
 	return nil
-}
-
-// Event is the interface that an event must implement to be sent to the backend
-type Event interface {
-	GetTags() []string
-	GetType() string
 }
 
 // RuleEvent is a wrapper used to send an event to the backend
@@ -444,7 +440,7 @@ func (a *APIServer) SendEvent(rule *rules.Rule, event Event, extTagsCb func() []
 		ruleEvent.AgentContext.PolicyVersion = policy.Version
 	}
 
-	probeJSON, err := json.Marshal(event)
+	probeJSON, err := marshalEvent(event, a.probe)
 	if err != nil {
 		seclog.Errorf("failed to marshal event: %v", err)
 		return
@@ -480,6 +476,22 @@ func (a *APIServer) SendEvent(rule *rules.Rule, event Event, extTagsCb func() []
 	}
 
 	a.enqueue(msg)
+}
+
+func marshalEvent(event Event, probe *sprobe.Probe) ([]byte, error) {
+	if ev, ok := event.(*model.Event); ok {
+		return sprobe.MarshalEvent(ev, probe)
+	}
+
+	if m, ok := event.(easyjson.Marshaler); ok {
+		w := &jwriter.Writer{
+			Flags: jwriter.NilSliceAsEmpty | jwriter.NilMapAsEmpty,
+		}
+		m.MarshalEasyJSON(w)
+		return w.BuildBytes()
+	}
+
+	return json.Marshal(event)
 }
 
 // expireEvent updates the count of expired messages for the appropriate rule
@@ -588,7 +600,7 @@ func NewAPIServer(cfg *config.Config, probe *sprobe.Probe, client statsd.ClientI
 	es := &APIServer{
 		msgs:                 make(chan *api.SecurityEventMessage, cfg.EventServerBurst*3),
 		processMsgs:          make(chan *api.SecurityProcessEventMessage, cfg.EventServerBurst*3),
-		activityDumps:        make(chan *api.ActivityDumpStreamMessage, probes.MaxTracedCgroupsCount*2),
+		activityDumps:        make(chan *api.ActivityDumpStreamMessage, model.MaxTracedCgroupsCount*2),
 		expiredEvents:        make(map[rules.RuleID]*atomic.Int64),
 		expiredProcessEvents: atomic.NewInt64(0),
 		expiredDumps:         atomic.NewInt64(0),

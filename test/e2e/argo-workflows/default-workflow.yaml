@@ -75,14 +75,14 @@ spec:
                 - name: namespace
                   value: "{{workflow.namespace}}"
 
-          # - name: start-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: create
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: start-nginx
+            templateRef:
+              name: nginx
+              template: create
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
 
         - - name: fake-dd-reset
             templateRef:
@@ -119,6 +119,8 @@ spec:
                   value: "{{inputs.parameters.ci_pipeline_id}}"
                 - name: ci_job_id
                   value: "{{inputs.parameters.ci_job_id}}"
+                - name: remote_configuration_enabled
+                  value: "false"
 
         - - name: wait-datadog-agent
             templateRef:
@@ -174,14 +176,14 @@ spec:
                 - name: namespace
                   value: "{{workflow.namespace}}"
 
-          # - name: test-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: test
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: test-nginx
+            templateRef:
+              name: nginx
+              template: test
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
 
           - name: test-busybox
             templateRef:
@@ -201,14 +203,14 @@ spec:
                 - name: namespace
                   value: "{{workflow.namespace}}"
 
-          # - name: stop-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: delete
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: stop-nginx
+            templateRef:
+              name: nginx
+              template: delete
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
 
         - - name: no-more-redis
             templateRef:
@@ -219,14 +221,14 @@ spec:
                 - name: namespace
                   value: "{{workflow.namespace}}"
 
-          # - name: no-more-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: no-more-metrics
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: no-more-nginx
+            templateRef:
+              name: nginx
+              template: no-more-metrics
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
 
     - name: exit-handler
       steps:
@@ -285,14 +287,14 @@ spec:
                 - name: namespace
                   value: "{{workflow.namespace}}"
 
-          # - name: stop-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: delete
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: stop-nginx
+            templateRef:
+              name: nginx
+              template: delete
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
 
           - name: stop-fake-datadog
             templateRef:
@@ -330,14 +332,14 @@ spec:
               parameters:
                 - name: namespace
                   value: "{{workflow.namespace}}"
-          # - name: diagnose-nginx
-          #   templateRef:
-          #     name: nginx
-          #     template: diagnose
-          #   arguments:
-          #     parameters:
-          #       - name: namespace
-          #         value: "{{workflow.namespace}}"
+          - name: diagnose-nginx
+            templateRef:
+              name: nginx
+              template: diagnose
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "{{workflow.namespace}}"
           - name: diagnose-busybox
             templateRef:
               name: busybox

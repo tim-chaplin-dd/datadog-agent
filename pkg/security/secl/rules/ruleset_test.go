@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/DataDog/datadog-agent/pkg/security/secl/compiler/ast"
 	"github.com/DataDog/datadog-agent/pkg/security/secl/compiler/eval"
 )
 
@@ -38,7 +39,7 @@ func (f *testHandler) EventDiscarderFound(rs *RuleSet, event eval.Event, field s
 	}
 	evaluator, _ := f.model.GetEvaluator(field, "")
 
-	ctx := eval.NewContext(event.GetPointer())
+	ctx := eval.NewContext(event)
 
 	value := evaluator.Eval(ctx)
 
@@ -67,7 +68,9 @@ func addRuleExpr(t *testing.T, rs *RuleSet, exprs ...string) {
 		ruleDefs = append(ruleDefs, ruleDef)
 	}
 
-	if err := rs.AddRules(ruleDefs); err != nil {
+	pc := ast.NewParsingContext()
+
+	if err := rs.AddRules(pc, ruleDefs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -84,14 +87,7 @@ func newRuleSet() *RuleSet {
 		WithSupportedDiscarders(testSupportedDiscarders).
 		WithEventTypeEnabled(enabled)
 
-	return NewRuleSet(&testModel{}, func() eval.Event { return &testEvent{} }, &opts, &evalOpts, &eval.MacroStore{})
-}
-
-func emptyReplCtx() eval.ReplacementContext {
-	return eval.ReplacementContext{
-		Opts:       &eval.Opts{},
-		MacroStore: &eval.MacroStore{},
-	}
+	return NewRuleSet(&testModel{}, func() eval.Event { return &testEvent{} }, &opts, &evalOpts)
 }
 
 func TestRuleBuckets(t *testing.T) {
@@ -323,7 +319,7 @@ func TestRuleSetApprovers4(t *testing.T) {
 	caps = FieldCapabilities{
 		{
 			Field: "open.filename",
-			Types: eval.ScalarValueType | eval.PatternValueType,
+			Types: eval.ScalarValueType | eval.GlobValueType,
 		},
 	}
 
@@ -494,7 +490,7 @@ func TestRuleSetApprovers11(t *testing.T) {
 	caps := FieldCapabilities{
 		{
 			Field:        "open.filename",
-			Types:        eval.ScalarValueType | eval.PatternValueType,
+			Types:        eval.ScalarValueType | eval.GlobValueType,
 			FilterWeight: 3,
 		},
 	}
@@ -545,12 +541,35 @@ func TestRuleSetApprovers13(t *testing.T) {
 	}
 }
 
-func TestGetRuleEventType(t *testing.T) {
-	rule := &eval.Rule{
-		ID:         "aaa",
-		Expression: `open.filename == "test"`,
+func TestRuleSetApprovers14(t *testing.T) {
+	exprs := []string{
+		`open.filename == "/etc/passwd"`,
+		`open.filename =~ "/etc/*/httpd"`,
 	}
-	if err := rule.GenEvaluator(&testModel{}, emptyReplCtx()); err != nil {
+
+	rs := newRuleSet()
+	addRuleExpr(t, rs, exprs...)
+
+	caps := FieldCapabilities{
+		{
+			Field:        "open.filename",
+			Types:        eval.ScalarValueType | eval.GlobValueType,
+			FilterWeight: 3,
+		},
+	}
+
+	approvers, _ := rs.GetEventApprovers("open", caps)
+	if len(approvers) != 1 || len(approvers["open.filename"]) != 2 {
+		t.Fatalf("shouldn't get an approver for filename: %v", approvers)
+	}
+}
+
+func TestGetRuleEventType(t *testing.T) {
+	rule := eval.NewRule("aaa", `open.filename == "test"`, &eval.Opts{})
+
+	pc := ast.NewParsingContext()
+
+	if err := rule.GenEvaluator(&testModel{}, pc); err != nil {
 		t.Fatal(err)
 	}
 

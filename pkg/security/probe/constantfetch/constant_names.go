@@ -20,6 +20,9 @@ const (
 	OffsetNameSignalStructStructTTY  = "tty_offset"
 	OffsetNameTTYStructStructName    = "tty_name_offset"
 	OffsetNameCredStructUID          = "creds_uid_offset"
+	OffsetNameLinuxBinprmP           = "linux_binprm_p_offset"
+	OffsetNameLinuxBinprmArgc        = "linux_binprm_argc_offset"
+	OffsetNameLinuxBinprmEnvc        = "linux_binprm_envc_offset"
 
 	// bpf offsets
 	OffsetNameBPFMapStructID                  = "bpf_map_id_offset"
@@ -55,4 +58,7 @@ const (
 
 	// Interpreter constants
 	OffsetNameLinuxBinprmStructFile = "binprm_file_offset"
+
+	// iouring constants
+	OffsetNameIoKiocbStructCtx = "iokiocb_ctx_offset"
 )

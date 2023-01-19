@@ -25,11 +25,7 @@ static __attribute__((always_inline)) u32 copy_tty_name(const char src[TTY_NAME_
         return 0;
     }
 
-#pragma unroll
-    for (int i = 0; i < TTY_NAME_LEN; i++)
-    {
-        dst[i] = src[i];
-    }
+    bpf_probe_read(dst, TTY_NAME_LEN, (void*)src);
     return TTY_NAME_LEN;
 }
 
@@ -50,8 +46,6 @@ struct bpf_map_def SEC("maps/proc_cache") proc_cache = {
     .key_size = sizeof(u32),
     .value_size = sizeof(struct proc_cache_t),
     .max_entries = 16384,
-    .pinning = 0,
-    .namespace = "",
 };
 
 static void __attribute__((always_inline)) fill_container_context(struct proc_cache_t *entry, struct container_context_t *context) {
@@ -95,8 +89,6 @@ struct bpf_map_def SEC("maps/pid_cache") pid_cache = {
     .key_size = sizeof(u32),
     .value_size = sizeof(struct pid_cache_t),
     .max_entries = 16384,
-    .pinning = 0,
-    .namespace = "",
 };
 
 struct bpf_map_def SEC("maps/pid_ignored") pid_ignored = {
@@ -104,23 +96,19 @@ struct bpf_map_def SEC("maps/pid_ignored") pid_ignored = {
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 16738,
-    .pinning = 0,
-    .namespace = "",
 };
 
 // defined in exec.h
 struct proc_cache_t *get_proc_from_cookie(u32 cookie);
 
 struct proc_cache_t * __attribute__((always_inline)) get_proc_cache(u32 tgid) {
-    struct proc_cache_t *entry = NULL;
-
     struct pid_cache_t *pid_entry = (struct pid_cache_t *) bpf_map_lookup_elem(&pid_cache, &tgid);
-    if (pid_entry) {
-        // Select the cache entry
-        u32 cookie = pid_entry->cookie;
-        entry = get_proc_from_cookie(cookie);
+    if (!pid_entry) {
+        return NULL;
     }
-    return entry;
+
+    // Select the cache entry
+    return get_proc_from_cookie(pid_entry->cookie);
 }
 
 struct bpf_map_def SEC("maps/netns_cache") netns_cache = {
@@ -128,8 +116,6 @@ struct bpf_map_def SEC("maps/netns_cache") netns_cache = {
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 40960,
-    .pinning = 0,
-    .namespace = "",
 };
 
 static struct proc_cache_t * __attribute__((always_inline)) fill_process_context_with_pid_tgid(struct process_context_t *data, u64 pid_tgid) {
@@ -152,7 +138,12 @@ static struct proc_cache_t * __attribute__((always_inline)) fill_process_context
         data->is_kworker = 1;
     }
 
-    return get_proc_cache(tgid);
+    struct proc_cache_t *pc = get_proc_cache(tgid);
+    if (pc) {
+        data->inode = pc->entry.executable.path_key.ino;
+    }
+
+    return pc;
 }
 
 static struct proc_cache_t * __attribute__((always_inline)) fill_process_context(struct process_context_t *data) {
@@ -165,8 +156,6 @@ struct bpf_map_def SEC("maps/root_nr_namespace_nr") root_nr_namespace_nr = {
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 32768,
-    .pinning = 0,
-    .namespace = "",
 };
 
 struct bpf_map_def SEC("maps/namespace_nr_root_nr") namespace_nr_root_nr = {
@@ -174,8 +163,6 @@ struct bpf_map_def SEC("maps/namespace_nr_root_nr") namespace_nr_root_nr = {
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 32768,
-    .pinning = 0,
-    .namespace = "",
 };
 
 void __attribute__((always_inline)) register_nr(u32 root_nr, u64 namespace_nr) {

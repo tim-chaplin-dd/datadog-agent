@@ -6,6 +6,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,10 +17,11 @@ import (
 	"unicode"
 
 	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
+	"github.com/DataDog/datadog-agent/pkg/trace/api/internal/header"
 	"github.com/DataDog/datadog-agent/pkg/trace/config"
-	"github.com/DataDog/datadog-agent/pkg/trace/metrics"
 	"github.com/DataDog/datadog-agent/pkg/trace/pb"
 	"github.com/DataDog/datadog-agent/pkg/trace/sampler"
+	"github.com/DataDog/datadog-agent/pkg/trace/teststatsd"
 	"github.com/DataDog/datadog-agent/pkg/trace/testutil"
 
 	"github.com/stretchr/testify/assert"
@@ -88,11 +90,10 @@ var otlpTestTracesRequest = testutil.NewOTLPTracesRequest([]testutil.OTLPResourc
 
 func TestOTLPMetrics(t *testing.T) {
 	assert := assert.New(t)
-	stats := &testutil.TestStatsClient{}
 	cfg := config.New()
+	stats := &teststatsd.Client{}
+	defer testutil.WithStatsClient(stats)()
 
-	defer func(old metrics.StatsClient) { metrics.Client = old }(metrics.Client)
-	metrics.Client = stats
 	out := make(chan *Payload, 1)
 	rcv := NewOTLPReceiver(out, cfg)
 	rspans := testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
@@ -117,15 +118,15 @@ func TestOTLPMetrics(t *testing.T) {
 		},
 	}).Traces().ResourceSpans()
 
-	rcv.ReceiveResourceSpans(rspans.At(0), http.Header{}, "")
-	rcv.ReceiveResourceSpans(rspans.At(1), http.Header{}, "")
+	rcv.ReceiveResourceSpans(context.Background(), rspans.At(0), http.Header{})
+	rcv.ReceiveResourceSpans(context.Background(), rspans.At(1), http.Header{})
 
 	calls := stats.CountCalls
 	assert.Equal(4, len(calls))
-	assert.Contains(calls, testutil.MetricsArgs{Name: "datadog.trace_agent.otlp.spans", Value: 3, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry__v1"}, Rate: 1})
-	assert.Contains(calls, testutil.MetricsArgs{Name: "datadog.trace_agent.otlp.spans", Value: 2, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry__v1"}, Rate: 1})
-	assert.Contains(calls, testutil.MetricsArgs{Name: "datadog.trace_agent.otlp.traces", Value: 1, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry__v1"}, Rate: 1})
-	assert.Contains(calls, testutil.MetricsArgs{Name: "datadog.trace_agent.otlp.traces", Value: 2, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry__v1"}, Rate: 1})
+	assert.Contains(calls, teststatsd.MetricsArgs{Name: "datadog.trace_agent.otlp.spans", Value: 3, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry_grpc_v1"}, Rate: 1})
+	assert.Contains(calls, teststatsd.MetricsArgs{Name: "datadog.trace_agent.otlp.spans", Value: 2, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry_grpc_v1"}, Rate: 1})
+	assert.Contains(calls, teststatsd.MetricsArgs{Name: "datadog.trace_agent.otlp.traces", Value: 1, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry_grpc_v1"}, Rate: 1})
+	assert.Contains(calls, teststatsd.MetricsArgs{Name: "datadog.trace_agent.otlp.traces", Value: 2, Tags: []string{"tracer_version:otlp-", "endpoint_version:opentelemetry_grpc_v1"}, Rate: 1})
 }
 
 func TestOTLPNameRemapping(t *testing.T) {
@@ -133,7 +134,7 @@ func TestOTLPNameRemapping(t *testing.T) {
 	cfg.OTLPReceiver.SpanNameRemappings = map[string]string{"libname.unspecified": "new"}
 	out := make(chan *Payload, 1)
 	rcv := NewOTLPReceiver(out, cfg)
-	rcv.ReceiveResourceSpans(testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
+	rcv.ReceiveResourceSpans(context.Background(), testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
 		{
 			LibName:    "libname",
 			LibVersion: "1.2",
@@ -142,7 +143,7 @@ func TestOTLPNameRemapping(t *testing.T) {
 				{Name: "asd"},
 			},
 		},
-	}).Traces().ResourceSpans().At(0), http.Header{}, "")
+	}).Traces().ResourceSpans().At(0), http.Header{})
 	timeout := time.After(500 * time.Millisecond)
 	select {
 	case <-timeout:
@@ -340,7 +341,8 @@ func TestOTLPReceiveResourceSpans(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			rcv.ReceiveResourceSpans(testutil.NewOTLPTracesRequest(tt.in).Traces().ResourceSpans().At(0), http.Header{}, "agent_tests")
+			rspans := testutil.NewOTLPTracesRequest(tt.in).Traces().ResourceSpans().At(0)
+			rcv.ReceiveResourceSpans(context.Background(), rspans, http.Header{})
 			timeout := time.After(500 * time.Millisecond)
 			select {
 			case <-timeout:
@@ -350,6 +352,28 @@ func TestOTLPReceiveResourceSpans(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("ClientComputedStats", func(t *testing.T) {
+		rspans := testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
+			{
+				LibName:    "libname",
+				LibVersion: "1.2",
+				Attributes: map[string]interface{}{},
+				Spans: []*testutil.OTLPSpan{
+					{Attributes: map[string]interface{}{string(semconv.AttributeK8SPodUID): "123cid"}},
+				},
+			},
+		}).Traces().ResourceSpans().At(0)
+		rcv.ReceiveResourceSpans(context.Background(), rspans, http.Header{})
+		timeout := time.After(500 * time.Millisecond)
+		select {
+		case <-timeout:
+			t.Fatal("timed out")
+		case p := <-out:
+			// stats are computed this time
+			require.False(p.ClientComputedStats)
+		}
+	})
 }
 
 func TestOTLPSetAttributes(t *testing.T) {
@@ -422,14 +446,14 @@ func TestOTLPHostname(t *testing.T) {
 		if tt.span != "" {
 			rattr["_dd.hostname"] = tt.span
 		}
-		src := rcv.ReceiveResourceSpans(testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
+		src := rcv.ReceiveResourceSpans(context.Background(), testutil.NewOTLPTracesRequest([]testutil.OTLPResourceSpan{
 			{
 				LibName:    "a",
 				LibVersion: "1.2",
 				Attributes: rattr,
 				Spans:      []*testutil.OTLPSpan{{Attributes: sattr}},
 			},
-		}).Traces().ResourceSpans().At(0), http.Header{}, "")
+		}).Traces().ResourceSpans().At(0), http.Header{})
 		assert.Equal(t, src.Kind, source.HostnameKind)
 		assert.Equal(t, src.Identifier, tt.out)
 		timeout := time.After(500 * time.Millisecond)
@@ -452,23 +476,7 @@ func TestOTLPReceiver(t *testing.T) {
 		o := NewOTLPReceiver(nil, config.New())
 		o.Start()
 		defer o.Stop()
-		assert.Nil(t, o.httpsrv)
 		assert.Nil(t, o.grpcsrv)
-	})
-
-	t.Run("Start/http", func(t *testing.T) {
-		port := testutil.FreeTCPPort(t)
-		cfg := config.New()
-		cfg.OTLPReceiver = &config.OTLP{
-			BindHost: "localhost",
-			HTTPPort: port,
-		}
-		o := NewOTLPReceiver(nil, cfg)
-		o.Start()
-		defer o.Stop()
-		assert.Nil(t, o.grpcsrv)
-		assert.NotNil(t, o.httpsrv)
-		assert.Equal(t, fmt.Sprintf("localhost:%d", port), o.httpsrv.Addr)
 	})
 
 	t.Run("Start/grpc", func(t *testing.T) {
@@ -482,7 +490,6 @@ func TestOTLPReceiver(t *testing.T) {
 		o.Start()
 		defer o.Stop()
 		assert := assert.New(t)
-		assert.Nil(o.httpsrv)
 		assert.NotNil(o.grpcsrv)
 		svc, ok := o.grpcsrv.GetServiceInfo()["opentelemetry.proto.collector.trace.v1.TraceService"]
 		assert.True(ok)
@@ -490,27 +497,12 @@ func TestOTLPReceiver(t *testing.T) {
 		assert.Equal("Export", svc.Methods[0].Name)
 	})
 
-	t.Run("Start/http+grpc", func(t *testing.T) {
-		port1, port2 := testutil.FreeTCPPort(t), testutil.FreeTCPPort(t)
-		cfg := config.New()
-		cfg.OTLPReceiver = &config.OTLP{
-			BindHost: "localhost",
-			HTTPPort: port1,
-			GRPCPort: port2,
-		}
-		o := NewOTLPReceiver(nil, cfg)
-		o.Start()
-		defer o.Stop()
-		assert.NotNil(t, o.grpcsrv)
-		assert.NotNil(t, o.httpsrv)
-	})
-
 	t.Run("processRequest", func(t *testing.T) {
 		out := make(chan *Payload, 5)
 		o := NewOTLPReceiver(out, config.New())
-		o.processRequest(otlpProtocolGRPC, http.Header(map[string][]string{
-			headerLang:        {"go"},
-			headerContainerID: {"containerdID"},
+		o.processRequest(context.Background(), http.Header(map[string][]string{
+			header.Lang:        {"go"},
+			header.ContainerID: {"containerdID"},
 		}), otlpTestTracesRequest)
 		ps := make([]*Payload, 2)
 		timeout := time.After(time.Second / 2)
@@ -529,14 +521,14 @@ func TestOTLPReceiver(t *testing.T) {
 }
 
 var (
-	otlpTestSpanID  = pcommon.NewSpanID([8]byte{0x24, 0x0, 0x31, 0xea, 0xd7, 0x50, 0xe5, 0xf3})
-	otlpTestTraceID = pcommon.NewTraceID([16]byte{0x72, 0xdf, 0x52, 0xa, 0xf2, 0xbd, 0xe7, 0xa5, 0x24, 0x0, 0x31, 0xea, 0xd7, 0x50, 0xe5, 0xf3})
+	otlpTestSpanID  = pcommon.SpanID([8]byte{0x24, 0x0, 0x31, 0xea, 0xd7, 0x50, 0xe5, 0xf3})
+	otlpTestTraceID = pcommon.TraceID([16]byte{0x72, 0xdf, 0x52, 0xa, 0xf2, 0xbd, 0xe7, 0xa5, 0x24, 0x0, 0x31, 0xea, 0xd7, 0x50, 0xe5, 0xf3})
 )
 
 func TestOTLPHelpers(t *testing.T) {
 	t.Run("byteArrayToUint64", func(t *testing.T) {
-		assert.Equal(t, uint64(0x240031ead750e5f3), traceIDToUint64(otlpTestTraceID.Bytes()))
-		assert.Equal(t, uint64(0x240031ead750e5f3), spanIDToUint64(otlpTestSpanID.Bytes()))
+		assert.Equal(t, uint64(0x240031ead750e5f3), traceIDToUint64([16]byte(otlpTestTraceID)))
+		assert.Equal(t, uint64(0x240031ead750e5f3), spanIDToUint64([8]byte(otlpTestSpanID)))
 	})
 
 	t.Run("spanKindNames", func(t *testing.T) {
@@ -631,7 +623,7 @@ func TestOTLPHelpers(t *testing.T) {
 		} {
 			assert := assert.New(t)
 			span := pb.Span{Meta: make(map[string]string)}
-			status := ptrace.NewSpanStatus()
+			status := ptrace.NewStatus()
 			status.SetCode(tt.status)
 			status.SetMessage(tt.msg)
 			status2Error(status, tt.events, &span)
@@ -741,11 +733,11 @@ func TestOTLPHelpers(t *testing.T) {
 
 	t.Run("tagsFromHeaders", func(t *testing.T) {
 		out := tagsFromHeaders(http.Header(map[string][]string{
-			headerLang:                  {"go"},
-			headerLangVersion:           {"1.14"},
-			headerLangInterpreter:       {"x"},
-			headerLangInterpreterVendor: {"y"},
-		}), otlpProtocolGRPC)
+			header.Lang:                  {"go"},
+			header.LangVersion:           {"1.14"},
+			header.LangInterpreter:       {"x"},
+			header.LangInterpreterVendor: {"y"},
+		}))
 		assert.Equal(t, []string{"endpoint_version:opentelemetry_grpc_v1", "lang:go", "lang_version:1.14", "interpreter:x", "lang_vendor:y"}, out)
 	})
 }
@@ -784,11 +776,10 @@ func TestOTLPConvertSpan(t *testing.T) {
 					"name":                    "john",
 					"otel.trace_id":           "72df520af2bde7a5240031ead750e5f3",
 					"env":                     "staging",
-					"otel.status_code":        "STATUS_CODE_ERROR",
+					"otel.status_code":        "Error",
 					"otel.status_description": "Error",
 					"otel.library.name":       "ddtracer",
 					"otel.library.version":    "v2",
-					"service.name":            "pylons",
 					"service.version":         "v1.2.3",
 					"w3c.tracestate":          "state",
 					"version":                 "v1.2.3",
@@ -806,12 +797,14 @@ func TestOTLPConvertSpan(t *testing.T) {
 		}, {
 			rattr: map[string]string{
 				"service.version": "v1.2.3",
+				"service.name":    "myservice",
+				"peer.service":    "mypeerservice",
 			},
 			libname: "ddtracer",
 			libver:  "v2",
 			in: testutil.NewOTLPSpan(&testutil.OTLPSpan{
-				TraceID:    otlpTestTraceID.Bytes(),
-				SpanID:     otlpTestSpanID.Bytes(),
+				TraceID:    otlpTestTraceID,
+				SpanID:     otlpTestSpanID,
 				TraceState: "state",
 				Name:       "/path",
 				Kind:       ptrace.SpanKindServer,
@@ -865,7 +858,7 @@ func TestOTLPConvertSpan(t *testing.T) {
 					"env":                     "prod",
 					"deployment.environment":  "prod",
 					"otel.trace_id":           "72df520af2bde7a5240031ead750e5f3",
-					"otel.status_code":        "STATUS_CODE_ERROR",
+					"otel.status_code":        "Error",
 					"otel.status_description": "Error",
 					"otel.library.name":       "ddtracer",
 					"otel.library.version":    "v2",
@@ -888,15 +881,15 @@ func TestOTLPConvertSpan(t *testing.T) {
 			},
 		}, {
 			rattr: map[string]string{
-				"service.name":    "pylons",
+				"service.name":    "myservice",
 				"service.version": "v1.2.3",
 				"env":             "staging",
 			},
 			libname: "ddtracer",
 			libver:  "v2",
 			in: testutil.NewOTLPSpan(&testutil.OTLPSpan{
-				TraceID:    otlpTestTraceID.Bytes(),
-				SpanID:     otlpTestSpanID.Bytes(),
+				TraceID:    otlpTestTraceID,
+				SpanID:     otlpTestSpanID,
 				TraceState: "state",
 				Name:       "/path",
 				Kind:       ptrace.SpanKindServer,
@@ -909,6 +902,7 @@ func TestOTLPConvertSpan(t *testing.T) {
 					"approx":          1.2,
 					"count":           2,
 					"analytics.event": "false",
+					"service.name":    "pylons",
 				},
 				Events: []testutil.OTLPSpanEvent{
 					{
@@ -947,11 +941,10 @@ func TestOTLPConvertSpan(t *testing.T) {
 				Meta: map[string]string{
 					"name":                    "john",
 					"env":                     "staging",
-					"otel.status_code":        "STATUS_CODE_ERROR",
+					"otel.status_code":        "Error",
 					"otel.status_description": "Error",
 					"otel.library.name":       "ddtracer",
 					"otel.library.version":    "v2",
-					"service.name":            "pylons",
 					"service.version":         "v1.2.3",
 					"w3c.tracestate":          "state",
 					"version":                 "v1.2.3",
@@ -1006,12 +999,13 @@ func TestOTLPConvertSpan(t *testing.T) {
 				Duration: 200000000,
 				Meta: map[string]string{
 					"env":                             "staging",
-					"_dd.tags.container":              "container_id:cid,kube_container_name:k8s-container",
+					"container_id":                    "cid",
+					"kube_container_name":             "k8s-container",
 					semconv.AttributeContainerID:      "cid",
 					semconv.AttributeK8SContainerName: "k8s-container",
 					"http.method":                     "GET",
 					"http.route":                      "/path",
-					"otel.status_code":                "STATUS_CODE_UNSET",
+					"otel.status_code":                "Unset",
 					"otel.library.name":               "ddtracer",
 					"otel.library.version":            "v2",
 					"name":                            "john",
@@ -1026,50 +1020,52 @@ func TestOTLPConvertSpan(t *testing.T) {
 			},
 		},
 	} {
-		lib := pcommon.NewInstrumentationScope()
-		lib.SetName(tt.libname)
-		lib.SetVersion(tt.libver)
-		assert := assert.New(t)
-		want := tt.out
-		got := o.convertSpan(tt.rattr, lib, tt.in)
-		if len(want.Meta) != len(got.Meta) {
-			t.Fatalf("(%d) Meta count mismatch:\n%#v", i, got.Meta)
-		}
-		for k, v := range want.Meta {
-			switch k {
-			case "events":
-				// events contain maps with no guaranteed order of
-				// traversal; best to unpack to compare
-				var gote, wante []testutil.OTLPSpanEvent
-				if err := json.Unmarshal([]byte(v), &wante); err != nil {
-					t.Fatalf("(%d) Error unmarshalling: %v", i, err)
-				}
-				if err := json.Unmarshal([]byte(got.Meta[k]), &gote); err != nil {
-					t.Fatalf("(%d) Error unmarshalling: %v", i, err)
-				}
-				assert.Equal(wante, gote)
-			case "_dd.container_tags":
-				// order not guaranteed, so we need to unpack and sort to compare
-				gott := strings.Split(got.Meta[tagContainersTags], ",")
-				wantt := strings.Split(want.Meta[tagContainersTags], ",")
-				sort.Strings(gott)
-				sort.Strings(wantt)
-				assert.Equal(wantt, gott)
-			default:
-				assert.Equal(v, got.Meta[k], fmt.Sprintf("(%d) Meta %v:%v", i, k, v))
+		t.Run("", func(t *testing.T) {
+			lib := pcommon.NewInstrumentationScope()
+			lib.SetName(tt.libname)
+			lib.SetVersion(tt.libver)
+			assert := assert.New(t)
+			want := tt.out
+			got := o.convertSpan(tt.rattr, lib, tt.in)
+			if len(want.Meta) != len(got.Meta) {
+				t.Fatalf("(%d) Meta count mismatch:\n%#v", i, got.Meta)
 			}
-		}
-		if len(want.Metrics) != len(got.Metrics) {
-			t.Fatalf("(%d) Metrics count mismatch:\n\n%v\n\n%v", i, want.Metrics, got.Metrics)
-		}
-		for k, v := range want.Metrics {
-			assert.Equal(v, got.Metrics[k], fmt.Sprintf("(%d) Metric %v:%v", i, k, v))
-		}
-		want.Meta = nil
-		want.Metrics = nil
-		got.Meta = nil
-		got.Metrics = nil
-		assert.Equal(want, got, i)
+			for k, v := range want.Meta {
+				switch k {
+				case "events":
+					// events contain maps with no guaranteed order of
+					// traversal; best to unpack to compare
+					var gote, wante []testutil.OTLPSpanEvent
+					if err := json.Unmarshal([]byte(v), &wante); err != nil {
+						t.Fatalf("(%d) Error unmarshalling: %v", i, err)
+					}
+					if err := json.Unmarshal([]byte(got.Meta[k]), &gote); err != nil {
+						t.Fatalf("(%d) Error unmarshalling: %v", i, err)
+					}
+					assert.Equal(wante, gote)
+				case "_dd.container_tags":
+					// order not guaranteed, so we need to unpack and sort to compare
+					gott := strings.Split(got.Meta[tagContainersTags], ",")
+					wantt := strings.Split(want.Meta[tagContainersTags], ",")
+					sort.Strings(gott)
+					sort.Strings(wantt)
+					assert.Equal(wantt, gott)
+				default:
+					assert.Equal(v, got.Meta[k], fmt.Sprintf("(%d) Meta %v:%v", i, k, v))
+				}
+			}
+			if len(want.Metrics) != len(got.Metrics) {
+				t.Fatalf("(%d) Metrics count mismatch:\n\n%v\n\n%v", i, want.Metrics, got.Metrics)
+			}
+			for k, v := range want.Metrics {
+				assert.Equal(v, got.Metrics[k], fmt.Sprintf("(%d) Metric %v:%v", i, k, v))
+			}
+			want.Meta = nil
+			want.Metrics = nil
+			got.Meta = nil
+			got.Metrics = nil
+			assert.Equal(want, got, i)
+		})
 	}
 }
 
@@ -1094,7 +1090,10 @@ func makeEventsSlice(name string, attrs map[string]string, timestamp int, droppe
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		e.Attributes().Insert(k, pcommon.NewValueString(attrs[k]))
+		_, ok := e.Attributes().Get(k)
+		if !ok {
+			e.Attributes().PutStr(k, attrs[k])
+		}
 	}
 	e.SetTimestamp(pcommon.Timestamp(timestamp))
 	e.SetDroppedAttributesCount(dropped)
@@ -1236,8 +1235,8 @@ func trimSpaces(str string) string {
 
 func BenchmarkProcessRequest(b *testing.B) {
 	metadata := http.Header(map[string][]string{
-		headerLang:        {"go"},
-		headerContainerID: {"containerdID"},
+		header.Lang:        {"go"},
+		header.ContainerID: {"containerdID"},
 	})
 	out := make(chan *Payload, 100)
 	end := make(chan struct{})
@@ -1257,7 +1256,7 @@ func BenchmarkProcessRequest(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r.processRequest(otlpProtocolHTTP, metadata, otlpTestTracesRequest)
+		r.processRequest(context.Background(), metadata, otlpTestTracesRequest)
 	}
 	b.StopTimer()
 	end <- struct{}{}

@@ -14,7 +14,7 @@ import (
 	"github.com/dustin/go-humanize"
 
 	"github.com/DataDog/datadog-agent/pkg/network/dns"
-	"github.com/DataDog/datadog-agent/pkg/network/http"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 )
 
@@ -121,6 +121,8 @@ type Connections struct {
 	DNS                         map[util.Address][]dns.Hostname
 	ConnTelemetry               map[ConnTelemetryType]int64
 	CompilationTelemetryByAsset map[string]RuntimeCompilationTelemetry
+	KernelHeaderFetchResult     int32
+	CORETelemetryByAsset        map[string]int32
 	HTTP                        map[http.Key]*http.RequestStats
 	DNSStats                    dns.StatsByKeyByNameByType
 }
@@ -146,8 +148,6 @@ const (
 	ConntrackSamplingPercent        ConnTelemetryType = "conntrack_sampling_percent"
 	NPMDriverFlowsMissedMaxExceeded ConnTelemetryType = "driver_flows_missed_max_exceeded"
 	MonotonicDNSPacketsDropped      ConnTelemetryType = "dns_packets_dropped"
-	HTTPRequestsDropped             ConnTelemetryType = "http_requests_dropped"
-	HTTPRequestsMissed              ConnTelemetryType = "http_requests_missed"
 )
 
 //revive:enable
@@ -160,8 +160,6 @@ var (
 		ConntrackSamplingPercent,
 		DNSStatsDropped,
 		NPMDriverFlowsMissedMaxExceeded,
-		HTTPRequestsDropped,
-		HTTPRequestsMissed,
 	}
 
 	// MonotonicConnTelemetryTypes lists all the possible monotonic telemetry which can be bundled
@@ -185,7 +183,6 @@ var (
 type RuntimeCompilationTelemetry struct {
 	RuntimeCompilationEnabled  bool
 	RuntimeCompilationResult   int32
-	KernelHeaderFetchResult    int32
 	RuntimeCompilationDuration int64
 }
 
@@ -206,39 +203,9 @@ type StatCounters struct {
 	TCPClosed      uint32
 }
 
-// StatCountersByCookie stores StatCounters by unique cookie
-type StatCountersByCookie []*struct {
-	StatCounters
-	Cookie uint32
-}
-
-// Get returns a StatCounters object for a cookie
-func (s StatCountersByCookie) Get(cookie uint32) (StatCounters, bool) {
-	for _, c := range s {
-		if c.Cookie == cookie {
-			return c.StatCounters, true
-		}
-	}
-
-	return StatCounters{}, false
-}
-
-// Put adds or sets a StatCounters object for a cookie
-func (s *StatCountersByCookie) Put(cookie uint32, sc StatCounters) {
-	for _, c := range *s {
-		if c.Cookie == cookie {
-			c.StatCounters = sc
-			return
-		}
-	}
-
-	*s = append(*s, &struct {
-		StatCounters
-		Cookie uint32
-	}{
-		StatCounters: sc,
-		Cookie:       cookie,
-	})
+// IsZero returns whether all the stat counter values are zeroes
+func (s StatCounters) IsZero() bool {
+	return s == StatCounters{}
 }
 
 // ConnectionStats stores statistics for a single connection.  Field order in the struct should be 8-byte aligned
@@ -249,22 +216,11 @@ type ConnectionStats struct {
 	IPTranslation *IPTranslation
 	Via           *Via
 
-	// Monotonic stores a list of StatCounters
-	// each identified by a unique "cookie"
-	//
-	// this is necessary because we use connection
-	// info like src/dst address/port to uniquely
-	// identify a connection and port reuse or
-	// races in the ebpf code may occur that would
-	// make conflicts in the stats per connection
-	// impossible to resolve/detect
-	//
-	// the "cookie" is generated in the ebpf code
-	// when we first create counters for a connection;
-	// see the get_conn_stats() function
-	Monotonic StatCountersByCookie
+	Monotonic StatCounters
 
 	Last StatCounters
+
+	Cookie uint32
 
 	// Last time the stats for this connection were updated
 	LastUpdateEpoch uint64
@@ -285,6 +241,7 @@ type ConnectionStats struct {
 
 	IntraHost bool
 	IsAssured bool
+	Protocol  ProtocolType
 }
 
 // Via has info about the routing decision for a flow
@@ -317,8 +274,9 @@ func (c ConnectionStats) IsExpired(now uint64, timeout uint64) bool {
 // ByteKey returns a unique key for this connection represented as a byte slice
 // It's as following:
 //
-//     4B      2B      2B     .5B     .5B      4/16B        4/16B   = 17/41B
-//    32b     16b     16b      4b      4b     32/128b      32/128b
+//	 4B      2B      2B     .5B     .5B      4/16B        4/16B   = 17/41B
+//	32b     16b     16b      4b      4b     32/128b      32/128b
+//
 // |  PID  | SPORT | DPORT | Family | Type |  SrcAddr  |  DestAddr
 func (c ConnectionStats) ByteKey(buf []byte) []byte {
 	return generateConnectionKey(c, buf, false)
@@ -336,26 +294,6 @@ func (c ConnectionStats) ByteKeyNAT(buf []byte) []byte {
 // between two connection checks
 func (c ConnectionStats) IsShortLived() bool {
 	return c.Last.TCPEstablished >= 1 && c.Last.TCPClosed >= 1
-}
-
-// MonotonicSum returns the sum of all the monotonic stats
-func (c ConnectionStats) MonotonicSum() StatCounters {
-	var stc StatCounters
-	for _, st := range c.Monotonic {
-		stc = stc.Add(st.StatCounters)
-	}
-
-	return stc
-}
-
-func (c ConnectionStats) clone() ConnectionStats {
-	cl := c
-	cl.Monotonic = make(StatCountersByCookie, 0, len(c.Monotonic))
-	for _, s := range c.Monotonic {
-		cl.Monotonic.Put(s.Cookie, s.StatCounters)
-	}
-
-	return cl
 }
 
 const keyFmt = "p:%d|src:%s:%d|dst:%s:%d|f:%d|t:%d"
@@ -383,7 +321,7 @@ func BeautifyKey(key string) string {
 	family := (raw[8] >> 4) & 0xf
 	typ := raw[8] & 0xf
 
-	// Finally source addr, dest addr
+	// source addr, dest addr
 	addrSize := 4
 	if ConnectionFamily(family) == AFINET6 {
 		addrSize = 16
@@ -417,31 +355,25 @@ func ConnectionSummary(c *ConnectionStats, names map[util.Address][]dns.Hostname
 		)
 	}
 
-	var stc StatCounters
-	cookies := make([]uint32, 0, len(c.Monotonic))
-	for _, st := range c.Monotonic {
-		stc = stc.Add(st.StatCounters)
-		cookies = append(cookies, st.Cookie)
-	}
-
 	str += fmt.Sprintf("(%s) %s sent (+%s), %s received (+%s)",
 		c.Direction,
-		humanize.Bytes(stc.SentBytes), humanize.Bytes(c.Last.SentBytes),
-		humanize.Bytes(stc.RecvBytes), humanize.Bytes(c.Last.RecvBytes),
+		humanize.Bytes(c.Monotonic.SentBytes), humanize.Bytes(c.Last.SentBytes),
+		humanize.Bytes(c.Monotonic.RecvBytes), humanize.Bytes(c.Last.RecvBytes),
 	)
 
 	if c.Type == TCP {
 		str += fmt.Sprintf(
 			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d)",
-			stc.Retransmits, c.Last.Retransmits,
+			c.Monotonic.Retransmits, c.Last.Retransmits,
 			time.Duration(c.RTT)*time.Microsecond,
 			time.Duration(c.RTTVar)*time.Microsecond,
-			stc.TCPEstablished, c.Last.TCPEstablished,
-			stc.TCPClosed, c.Last.TCPClosed,
+			c.Monotonic.TCPEstablished, c.Last.TCPEstablished,
+			c.Monotonic.TCPClosed, c.Last.TCPClosed,
 		)
 	}
 
-	str += fmt.Sprintf(", last update epoch: %d, cookies: %+v", c.LastUpdateEpoch, cookies)
+	str += fmt.Sprintf(", last update epoch: %d, cookie: %d", c.LastUpdateEpoch, c.Cookie)
+	str += fmt.Sprintf(", protocol: %v", c.Protocol)
 
 	return str
 }
@@ -460,27 +392,19 @@ func printAddress(address util.Address, names []dns.Hostname) string {
 	return b.String()
 }
 
-// HTTPKeyTupleFromConn build the key for the http map based on whether the local or remote side is http.
-func HTTPKeyTupleFromConn(c ConnectionStats) http.KeyTuple {
+// HTTPKeyTuplesFromConn build the key for the http map based on whether the local or remote side is http.
+func HTTPKeyTuplesFromConn(c ConnectionStats) [2]http.KeyTuple {
 	// Retrieve translated addresses
 	laddr, lport := GetNATLocalAddress(c)
 	raddr, rport := GetNATRemoteAddress(c)
-	return HTTPKeyTupleFromConnTuple(laddr, raddr, lport, rport)
-}
 
-// HTTPKeyTupleFromConnTuple builds the key for an http connection from a
-// connection tuple of (laddr, raddr, lport, rport)
-func HTTPKeyTupleFromConnTuple(laddr, raddr util.Address, lport, rport uint16) http.KeyTuple {
-	// HTTP data is always indexed as (client, server), so we account for that when generating the
-	// the lookup key using the port range heuristic.
-	// In the rare cases where both ports are within the same range we ensure that sport > dport
-	// to mimic the normalization heuristic done in the eBPF side (see `port_range.h`)
-	if (IsEphemeralPort(int(lport)) && !IsEphemeralPort(int(rport))) ||
-		(IsEphemeralPort(int(lport)) == IsEphemeralPort(int(rport)) && lport > rport) {
-		return http.NewKeyTuple(laddr, raddr, lport, rport)
+	// HTTP data is always indexed as (client, server), but we don't know which is the remote
+	// and which is the local address. To account for this, we'll construct 2 possible
+	// http keys and check for both of them in our http aggregations map.
+	return [2]http.KeyTuple{
+		http.NewKeyTuple(laddr, raddr, lport, rport),
+		http.NewKeyTuple(raddr, laddr, rport, lport),
 	}
-
-	return http.NewKeyTuple(raddr, laddr, rport, lport)
 }
 
 func generateConnectionKey(c ConnectionStats, buf []byte, useNAT bool) []byte {
@@ -504,6 +428,7 @@ func generateConnectionKey(c ConnectionStats, buf []byte, useNAT bool) []byte {
 
 	n += laddr.WriteTo(buf[n:]) // 4 or 16 bytes
 	n += raddr.WriteTo(buf[n:]) // 4 or 16 bytes
+
 	return buf[:n]
 }
 

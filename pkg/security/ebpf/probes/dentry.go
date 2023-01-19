@@ -13,6 +13,24 @@ import manager "github.com/DataDog/ebpf-manager"
 // getDentryResolverTailCallRoutes is the list of routes used during the dentry resolution process
 func getDentryResolverTailCallRoutes(ERPCDentryResolutionEnabled, supportMmapableMaps bool) []manager.TailCallRoute {
 	routes := []manager.TailCallRoute{
+		// activity dump filter programs
+		{
+			ProgArrayName: "dentry_resolver_kprobe_progs",
+			Key:           ActivityDumpFilterKprobeKey,
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFSection:  "kprobe/dentry_resolver_ad_filter",
+				EBPFFuncName: "kprobe_dentry_resolver_ad_filter",
+			},
+		},
+		{
+			ProgArrayName: "dentry_resolver_tracepoint_progs",
+			Key:           ActivityDumpFilterTracepointKey,
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFSection:  "tracepoint/dentry_resolver_ad_filter",
+				EBPFFuncName: "tracepoint_dentry_resolver_ad_filter",
+			},
+		},
+
 		// dentry resolver programs
 		{
 			ProgArrayName: "dentry_resolver_kprobe_progs",
@@ -118,6 +136,22 @@ func getDentryResolverTailCallRoutes(ERPCDentryResolutionEnabled, supportMmapabl
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFSection:  "kprobe/dr_selinux_callback",
 				EBPFFuncName: "kprobe_dr_selinux_callback",
+			},
+		},
+		{
+			ProgArrayName: "dentry_resolver_kprobe_callbacks",
+			Key:           DentryResolverUnshareMntNSStageOneCallbackKprobeKey,
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFSection:  "kprobe/dr_unshare_mntns_stage_one_callback",
+				EBPFFuncName: "kprobe_dr_unshare_mntns_stage_one_callback",
+			},
+		},
+		{
+			ProgArrayName: "dentry_resolver_kprobe_callbacks",
+			Key:           DentryResolverUnshareMntNSStageTwoCallbackKprobeKey,
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFSection:  "kprobe/dr_unshare_mntns_stage_two_callback",
+				EBPFFuncName: "kprobe_dr_unshare_mntns_stage_two_callback",
 			},
 		},
 
