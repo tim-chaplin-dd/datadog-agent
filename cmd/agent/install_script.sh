@@ -700,8 +700,11 @@ if [ "$upgrade" ] && [ "$agent_flavor" != "datadog-dogstatsd" ]; then
     # shellcheck disable=SC2086
     $sudo_cmd $icmd || printf "\033[31mAutomatic import failed, you can still try to manually run: $icmd\n\033[0m\n"
     # fix file owner and permissions since the script moves around some files
-    $sudo_cmd chown -R dd-agent:dd-agent "$etcdir"
-    $sudo_cmd find "$etcdir/" -type f -exec chmod 640 {} \;
+    $sudo_cmd chown -R root:dd-agent "$etcdir"
+    $sudo_cmd find ${etcdir} -type d -not -path ${etcdir}/conf.d -exec chmod 2750 {} \;
+    $sudo_cmd find ${etcdir} -type f -not -path ${etcdir}/conf.d -exec chmod 640 {} \;
+    $sudo_cmd chmod g+w ${etcdir}
+    $sudo_cmd chmod +t ${etcdir}
   else
     printf "\033[31mYou don't have a datadog.conf file to convert.\n\033[0m\n"
   fi
