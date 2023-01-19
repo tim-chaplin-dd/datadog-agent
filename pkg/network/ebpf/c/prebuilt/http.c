@@ -54,13 +54,15 @@ SEC("socket/http2_filter")
 int socket__http2_filter(struct __sk_buff *skb) {
     skb_info_t skb_info;
     const __u32 zero = 0;
-    http2_connection_t *http2_conn = bpf_map_lookup_elem(&http2_trans_alloc, &zero);
-    if (http2_conn == NULL) {
+    heap_buffer_t *heap_buffer = bpf_map_lookup_elem(&http2_heap_buffer, &zero);
+    if (heap_buffer == NULL) {
         return 0;
     }
-    bpf_memset(http2_conn, 0, sizeof(http2_connection_t));
-    if (read_conn_tuple_skb(skb, &skb_info, &http2_conn->tup)) {
-        http2_entrypoint(skb, &skb_info, http2_conn);
+    bpf_memset(heap_buffer, 0, sizeof(heap_buffer_t));
+    http2_connection_t http2_conn;
+    bpf_memset(&http2_conn, 0, sizeof(http2_connection_t));
+    if (read_conn_tuple_skb(skb, &skb_info, &http2_conn.tup)) {
+        http2_entrypoint(skb, &skb_info, &http2_conn, heap_buffer);
     }
 
     return 0;

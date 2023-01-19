@@ -105,11 +105,6 @@ typedef struct {
     conn_tuple_t tup;
     conn_tuple_t old_tup;
     __u32 tcp_seq;
-
-    __u32 current_offset_in_request_fragment;
-
-    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
-
     __u16 owned_by_src_port;
 } http2_connection_t;
 

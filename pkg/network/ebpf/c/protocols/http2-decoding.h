@@ -45,18 +45,18 @@ static __always_inline void http2_update_seen_before(http2_transaction_t *http2,
     http2->tcp_seq = skb_info->tcp_seq;
 }
 
-static __always_inline void http2_begin_request(http2_transaction_t *http2, http2_method_t method, char *buffer) {
+static __always_inline void http2_begin_request(http2_transaction_t *http2, heap_buffer_t *heap_buffer, http2_method_t method, char *buffer) {
 //    http2->request_method = method;
     http2->request_started = bpf_ktime_get_ns();
     http2->response_last_seen = 0;
-    bpf_memcpy(&http2->request_fragment, buffer, HTTP2_BUFFER_SIZE);
+    bpf_memcpy(&heap_buffer->request_fragment, buffer, HTTP2_BUFFER_SIZE);
 }
 
 static __always_inline int http2_responding(http2_transaction_t *http2) {
     return (http2 != NULL && http2->response_status_code != 0);
 }
 
-static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_info_t *skb_info,__u64 tags) {
+static __always_inline int http2_process(http2_transaction_t* http2_stack, heap_buffer_t *heap_buffer, skb_info_t *skb_info,__u64 tags) {
     http2_packet_t packet_type = HTTP2_PACKET_UNKNOWN;
     http2_method_t method = HTTP2_METHOD_UNKNOWN;
     __u64 response_code;
@@ -88,7 +88,7 @@ static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_
 
     if (packet_type == HTTP2_REQUEST) {
         log_debug("[http2] http2_process request: type=%d method=%d\n", packet_type, method);
-        http2_begin_request(http2, method, (char *)http2_stack->request_fragment);
+        http2_begin_request(http2, heap_buffer, method, (char *)heap_buffer->request_fragment);
         http2_update_seen_before(http2, skb_info);
     } else if (packet_type == HTTP2_RESPONSE) {
         log_debug("[http2] http2_begin_response: htx=%llx status=%d\n", http2, http2->response_status_code);
@@ -162,16 +162,16 @@ static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_
 //
 // The returned remain buffer is either a smaller suffix of p, or err != nil.
 // The error is errNeedMore if p doesn't contain a complete integer.
-static __always_inline __u64 read_var_int(http2_connection_t* http2_conn, __u64 factor){
-    if (http2_conn->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
-        return false;
+static __always_inline __u64 read_var_int(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, __u64 factor){
+    if (heap_buffer->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
+        return -1;
     }
 
-    __u64 current_char_as_number = http2_conn->request_fragment[http2_conn->current_offset_in_request_fragment];
+    __u64 current_char_as_number = heap_buffer->request_fragment[heap_buffer->current_offset_in_request_fragment];
     current_char_as_number &= (1 << factor) - 1;
 
     if (current_char_as_number < (1 << factor) - 1) {
-        http2_conn->current_offset_in_request_fragment += 1;
+        heap_buffer->current_offset_in_request_fragment += 1;
         return current_char_as_number;
     }
 
@@ -192,8 +192,8 @@ static __always_inline bool classify_static_value(http2_stream_t* http2_stream, 
 }
 
 // parse_field_indexed is handling the case which the header frame is part of the static table.
-static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, http2_stream_t* http2_stream){
-    __u64 index = read_var_int(http2_conn, 7);
+static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream){
+    __u64 index = read_var_int(http2_conn, heap_buffer, 7);
     if (index <= MAX_STATIC_TABLE_INDEX) {
         static_table_entry_t* static_value = bpf_map_lookup_elem(&http2_static_table, &index);
         if (static_value != NULL) {
@@ -225,18 +225,18 @@ static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, 
     }
 }
 
-static __always_inline bool update_current_offset(http2_connection_t* http2_conn){
-    __u64 str_len = read_var_int(http2_conn, 6);
-    if (str_len == -1) {
+static __always_inline bool update_current_offset(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer){
+    __u64 str_len = read_var_int(http2_conn, heap_buffer, 6);
+    if (str_len == -1 || str_len == 0) {
         return false;
     }
-    http2_conn->current_offset_in_request_fragment += (__u32)str_len;
+    heap_buffer->current_offset_in_request_fragment += (__u32)str_len;
     return true;
 }
 
 //// parse_field_literal handling the case when the key is part of the static table and the value is a dynamic string
 //// which will be stored in the dynamic table.
-static __always_inline void parse_field_literal(http2_connection_t* http2_conn, http2_stream_t* http2_stream, bool index_type){
+static __always_inline void parse_field_literal(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream, bool index_type){
     __u64 counter = 0;
 
     // global counter is the counter which help us with the calc of the index in our internal hpack dynamic table
@@ -248,19 +248,19 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
     // update the global counter.
     bpf_map_update_elem(&http2_dynamic_counter_table, &http2_conn->old_tup, &counter, BPF_ANY);
 
-    __u64 index = read_var_int(http2_conn, 6);
+    __u64 index = read_var_int(http2_conn, heap_buffer, 6);
 
     dynamic_table_entry_t dynamic_value = {};
-    dynamic_table_index_t dynamic_index = {};
+//    dynamic_table_index_t dynamic_index = {};
     static_table_entry_t *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
     if (static_value == NULL) {
-        update_current_offset(http2_conn);
+        update_current_offset(http2_conn, heap_buffer);
 
         // Literal Header Field with Incremental Indexing - New Name, which means we need to read the body as well,
         // so we are reading again and updating the len.
         // TODO: Better document.
-        if (index == 0) {
-            update_current_offset(http2_conn);
+        if (index == 0 && heap_buffer->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
+            update_current_offset(http2_conn, heap_buffer);
         }
         return;
     }
@@ -269,16 +269,16 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
         dynamic_value.index = static_value->key;
     }
 
-    __u64 str_len = read_var_int(http2_conn, 6);
+    __u64 str_len = read_var_int(http2_conn, heap_buffer, 6);
     if (str_len == -1 || str_len == 0){
         return;
     }
 
-    if (http2_conn->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
+    if (heap_buffer->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
         return;
     }
 
-    char *beginning = http2_conn->request_fragment + http2_conn->current_offset_in_request_fragment;
+    char *beginning = heap_buffer->request_fragment + heap_buffer->current_offset_in_request_fragment;
     // create the new dynamic value which will be added to the internal table.
     bpf_memcpy(dynamic_value.value.buffer, beginning, HTTP2_MAX_PATH_LEN);
 
@@ -286,45 +286,45 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
     dynamic_value.index = index;
 
     // create the new dynamic index which is bashed on the counter and the conn_tup.
-    dynamic_index.index = counter;
-    dynamic_index.old_tup = http2_conn->old_tup;
+//    dynamic_index.index = counter;
+//    dynamic_index.old_tup = http2_conn->old_tup;
+//
+//    bpf_map_update_elem(&http2_dynamic_table, &dynamic_index, &dynamic_value, BPF_ANY);
 
-    bpf_map_update_elem(&http2_dynamic_table, &dynamic_index, &dynamic_value, BPF_ANY);
-
-    http2_conn->current_offset_in_request_fragment += (__u32)str_len;
+//    heap_buffer->current_offset_in_request_fragment += (__u32)str_len;
 
     // index 5 represents the :path header - from static table
-    if (index == 5){
-        bpf_memcpy(http2_stream->path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
-        http2_stream->path_size = str_len;
-    }
+//    if (index == 5){
+//        bpf_memcpy(http2_stream->path, dynamic_value.value.buffer, HTTP2_MAX_PATH_LEN);
+//        http2_stream->path_size = str_len;
+//    }
 }
 
 // This function reads the http2 headers frame.
-static __always_inline bool process_headers(http2_connection_t* http2_conn, http2_stream_t* http2_stream) {
+static __always_inline bool process_headers(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream) {
     __s64 remaining_length = 0;
     char current_ch;
 
 #pragma unroll
     for (unsigned headers_index = 0; headers_index < HTTP2_MAX_HEADERS_COUNT; headers_index++) {
-        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)http2_conn->current_offset_in_request_fragment;
+        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)heap_buffer->current_offset_in_request_fragment;
         // TODO: if remaining_length == 0, just break and return true.
         if (remaining_length <= 0) {
             return false;
         }
-        current_ch = http2_conn->request_fragment[http2_conn->current_offset_in_request_fragment];
+        current_ch = heap_buffer->request_fragment[heap_buffer->current_offset_in_request_fragment];
         if ((current_ch&128) != 0) {
             // Indexed representation.
             // MSB bit set.
             // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
             log_debug("[http2] first char %d & 128 != 0; calling parse_field_indexed", current_ch);
-            parse_field_indexed(http2_conn, http2_stream);
+            parse_field_indexed(http2_conn, heap_buffer, http2_stream);
         } else if ((current_ch&192) == 64) {
             // 6.2.1 Literal Header Field with Incremental Indexing
             // top two bits are 10
             // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
             log_debug("[http2] first char %d & 192 == 64; calling parse_field_literal", current_ch);
-//            parse_field_literal(http2_conn, http2_stream, true);
+            parse_field_literal(http2_conn, heap_buffer, http2_stream, true);
         }
     }
 
@@ -332,7 +332,7 @@ static __always_inline bool process_headers(http2_connection_t* http2_conn, http
 }
 
 
-static __always_inline void process_frames(http2_connection_t* http2_conn) {
+static __always_inline void process_frames(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer) {
     struct http2_frame current_frame = {};
     bool is_end_of_stream;
     bool is_data_frame_end_of_stream;
@@ -346,19 +346,19 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
 
 #pragma unroll
     for (uint32_t frame_index = 0; frame_index < HTTP2_MAX_FRAMES; frame_index++) {
-        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)http2_conn->current_offset_in_request_fragment;
+        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)heap_buffer->current_offset_in_request_fragment;
         // We have left less than frame header, nothing to read.
         if (HTTP2_FRAME_HEADER_SIZE > remaining_length) {
             log_debug("[http2] the HTTP2_FRAME_HEADER_SIZE is bigger then the remaining_length: %d", remaining_length);
             return;
         }
         // Reading the header.
-        if (!read_http2_frame_header(http2_conn->request_fragment + http2_conn->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+        if (!read_http2_frame_header(heap_buffer->request_fragment + heap_buffer->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
             log_debug("[http2] unable to read_http2_frame_header");
             return;
         }
         // Modifying the offset.
-        http2_conn->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+        heap_buffer->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
         // Modifying the remaining length.
         remaining_length -= HTTP2_FRAME_HEADER_SIZE;
 
@@ -367,7 +367,7 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
         if (!is_data_frame_end_of_stream && current_frame.type != kHeadersFrame) {
             log_debug("[http2] frame is not supported\n");
             // Skipping the frame payload.
-            http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+            heap_buffer->current_offset_in_request_fragment += (__u32)current_frame.length;
             return;
         }
 
@@ -382,7 +382,7 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
         if (is_end_of_stream){
             http2_stream->end_of_stream += 1;
             if (is_data_frame_end_of_stream) {
-                http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+                heap_buffer->current_offset_in_request_fragment += (__u32)current_frame.length;
                 continue;
             }
         }
@@ -398,11 +398,11 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
             return;
         }
         // Process headers.
-        process_headers(http2_conn, http2_stream);
+        process_headers(http2_conn, heap_buffer, http2_stream);
     }
 }
 
-static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *skb_info, http2_connection_t *http2_conn) {
+static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *skb_info, http2_connection_t *http2_conn, heap_buffer_t *heap_buffer) {
     // src_port represents the source port number *before* normalization
     // for more context please refer to http-types.h comment on `owned_by_src_port` field
     http2_conn->owned_by_src_port = http2_conn->tup.sport;
@@ -410,15 +410,15 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
     http2_conn->old_tup = http2_conn->tup;
     normalize_tuple(&http2_conn->tup);
 
-    read_into_buffer_skb((char *)http2_conn->request_fragment, skb, skb_info);
+    read_into_buffer_skb((char *)heap_buffer->request_fragment, skb, skb_info);
     const __u32 payload_length = skb->len - skb_info->data_off;
     const __u32 final_payload_length = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
-    if (is_http2_preface(http2_conn->request_fragment, final_payload_length)) {
+    if (is_http2_preface(heap_buffer->request_fragment, final_payload_length)) {
         log_debug("[http2] http2 magic was found, aborting\n");
         return;
     }
 
-    process_frames(http2_conn);
+    process_frames(http2_conn, heap_buffer);
 //    http2_process(http2_conn, skb_info, NO_TAGS);
     return;
 }
