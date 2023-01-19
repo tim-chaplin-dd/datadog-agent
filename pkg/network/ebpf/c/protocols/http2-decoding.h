@@ -340,8 +340,12 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
     bool is_data_frame_end_of_stream;
     __s64 remaining_length = 0;
 
-    http2_stream_t http2_stream2 = {};
-    http2_stream_t *http2_stream = &http2_stream2;
+    http2_stream_t default_http2_stream2 = {};
+    http2_stream_t *http2_stream = NULL;
+
+    http2_stream_key_t stream_key = {};
+    bpf_memcpy(&stream_key.tup, &http2_conn->tup, sizeof(conn_tuple_t));
+
 #pragma unroll
     for (uint32_t frame_index = 0; frame_index < HTTP2_MAX_FRAMES; frame_index++) {
         remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)http2_conn->current_offset_in_request_fragment;
@@ -366,6 +370,14 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
             log_debug("[http2] frame is not supported\n");
             // Skipping the frame payload.
             http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+            return;
+        }
+
+        stream_key.stream_id = current_frame.stream_id;
+        bpf_map_update_with_telemetry(http2_stream_in_flight, &stream_key, &default_http2_stream2, BPF_NOEXIST);
+        http2_stream = bpf_map_lookup_elem(&http2_stream_in_flight, &stream_key);
+        if (http2_stream == NULL) {
+            log_debug("[http2] http2 stream was not found\n");
             return;
         }
 
