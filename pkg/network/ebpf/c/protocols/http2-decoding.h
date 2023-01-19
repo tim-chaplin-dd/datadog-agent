@@ -189,7 +189,7 @@ static __always_inline bool classify_static_value(http2_stream_t* http2_stream, 
 }
 
 // parse_field_indexed is handling the case which the header frame is part of the static table.
-static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream){
+static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream, dynamic_table_index_t *dynamic_index){
     __u64 index = read_var_int(http2_conn, heap_buffer, 7);
     if (index <= MAX_STATIC_TABLE_INDEX) {
         static_table_entry_t* static_value = bpf_map_lookup_elem(&http2_static_table, &index);
@@ -206,11 +206,11 @@ static __always_inline void parse_field_indexed(http2_connection_t* http2_conn, 
     // we change the index to fit our internal dynamic table implementation index.
     // the index is starting from 1 so we decrease 62 in order to be equal to the given index.
     __u64 new_index = *global_counter - (index - (MAX_STATIC_TABLE_INDEX + 1));
-    dynamic_table_index_t dynamic_index = {};
-    dynamic_index.index = new_index;
-    dynamic_index.old_tup = http2_conn->old_tup;
+    dynamic_index->index = new_index;
+//    // TODO: Get the struct from outside, and copy once
+//    dynamic_index.old_tup = http2_conn->old_tup;
 
-    dynamic_table_entry_t *dynamic_value_new = bpf_map_lookup_elem(&http2_dynamic_table, &dynamic_index);
+    dynamic_table_entry_t *dynamic_value_new = bpf_map_lookup_elem(&http2_dynamic_table, dynamic_index);
     if (dynamic_value_new == NULL) {
         return;
     }
@@ -233,7 +233,7 @@ static __always_inline bool update_current_offset(http2_connection_t* http2_conn
 
 //// parse_field_literal handling the case when the key is part of the static table and the value is a dynamic string
 //// which will be stored in the dynamic table.
-static __always_inline void parse_field_literal(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream, bool index_type){
+static __always_inline void parse_field_literal(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream, dynamic_table_index_t *dynamic_index, dynamic_table_entry_t *dynamic_value){
     __u64 counter = 0;
 
     // global counter is the counter which help us with the calc of the index in our internal hpack dynamic table
@@ -247,8 +247,6 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
 
     __u64 index = read_var_int(http2_conn, heap_buffer, 6);
 
-    dynamic_table_entry_t dynamic_value = {};
-//    dynamic_table_index_t dynamic_index = {};
     static_table_entry_t *static_value = bpf_map_lookup_elem(&http2_static_table, &index);
     if (static_value == NULL) {
         update_current_offset(http2_conn, heap_buffer);
@@ -262,9 +260,6 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
         return;
     }
 
-    if (index_type) {
-        dynamic_value.index = static_value->key;
-    }
 
     __u64 str_len = read_var_int(http2_conn, heap_buffer, 6);
     if (str_len == -1 || str_len == 0){
@@ -275,15 +270,19 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
         return;
     }
 
+    if (index != 5){
+        return;
+    }
     char *beginning = heap_buffer->request_fragment + heap_buffer->current_offset_in_request_fragment;
     // create the new dynamic value which will be added to the internal table.
-    bpf_memcpy(dynamic_value.value.buffer, beginning, HTTP2_MAX_PATH_LEN);
+    bpf_memcpy(dynamic_value->value.buffer, beginning, HTTP2_MAX_PATH_LEN);
 
-    dynamic_value.value.string_len = str_len;
-    dynamic_value.index = index;
+    dynamic_value->value.string_len = str_len;
+    dynamic_value->index = index;
 
     // create the new dynamic index which is bashed on the counter and the conn_tup.
 //    dynamic_index.index = counter;
+// TODO: Get the struct from outside, and copy once
 //    dynamic_index.old_tup = http2_conn->old_tup;
 //
 //    bpf_map_update_elem(&http2_dynamic_table, &dynamic_index, &dynamic_value, BPF_ANY);
@@ -298,7 +297,7 @@ static __always_inline void parse_field_literal(http2_connection_t* http2_conn, 
 }
 
 // This function reads the http2 headers frame.
-static __always_inline bool process_headers(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream) {
+static __always_inline bool process_headers(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, http2_stream_t* http2_stream, dynamic_table_index_t *dynamic_index, dynamic_table_entry_t *dynamic_value) {
     __s64 remaining_length = 0;
     char current_ch;
 
@@ -315,13 +314,13 @@ static __always_inline bool process_headers(http2_connection_t* http2_conn, heap
             // MSB bit set.
             // https://httpwg.org/specs/rfc7541.html#rfc.section.6.1
             log_debug("[http2] first char %d & 128 != 0; calling parse_field_indexed", current_ch);
-            parse_field_indexed(http2_conn, heap_buffer, http2_stream);
+            parse_field_indexed(http2_conn, heap_buffer, http2_stream, dynamic_index);
         } else if ((current_ch&192) == 64) {
             // 6.2.1 Literal Header Field with Incremental Indexing
             // top two bits are 10
             // https://httpwg.org/specs/rfc7541.html#rfc.section.6.2.1
             log_debug("[http2] first char %d & 192 == 64; calling parse_field_literal", current_ch);
-            parse_field_literal(http2_conn, heap_buffer, http2_stream, true);
+            parse_field_literal(http2_conn, heap_buffer, http2_stream, dynamic_index, dynamic_value);
         }
     }
 
@@ -329,7 +328,7 @@ static __always_inline bool process_headers(http2_connection_t* http2_conn, heap
 }
 
 
-static __always_inline void process_frames(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer) {
+static __always_inline void process_frames(http2_connection_t* http2_conn, heap_buffer_t *heap_buffer, dynamic_table_index_t *dynamic_index, dynamic_table_entry_t *dynamic_value) {
     struct http2_frame current_frame = {};
     bool is_end_of_stream;
     bool is_data_frame_end_of_stream;
@@ -340,6 +339,8 @@ static __always_inline void process_frames(http2_connection_t* http2_conn, heap_
 
     http2_stream_key_t stream_key = {};
     bpf_memcpy(&stream_key.tup, &http2_conn->tup, sizeof(conn_tuple_t));
+
+
 
 #pragma unroll
     for (uint32_t frame_index = 0; frame_index < HTTP2_MAX_FRAMES; frame_index++) {
@@ -395,7 +396,7 @@ static __always_inline void process_frames(http2_connection_t* http2_conn, heap_
             return;
         }
         // Process headers.
-        process_headers(http2_conn, heap_buffer, http2_stream);
+        process_headers(http2_conn, heap_buffer, http2_stream, dynamic_index, dynamic_value);
     }
 }
 
@@ -407,6 +408,10 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
     http2_conn->old_tup = http2_conn->tup;
     normalize_tuple(&http2_conn->tup);
 
+    dynamic_table_entry_t dynamic_value = {};
+    dynamic_table_index_t dynamic_index = {};
+    bpf_memcpy(&dynamic_index.old_tup, &http2_conn->tup, sizeof(conn_tuple_t));
+
     read_into_buffer_skb((char *)heap_buffer->request_fragment, skb, skb_info);
     const __u32 payload_length = skb->len - skb_info->data_off;
     const __u32 final_payload_length = HTTP2_BUFFER_SIZE < payload_length ? HTTP2_BUFFER_SIZE : payload_length;
@@ -415,7 +420,7 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
         return;
     }
 
-    process_frames(http2_conn, heap_buffer);
+    process_frames(http2_conn, heap_buffer, &dynamic_index, &dynamic_value);
 //    http2_process(http2_conn, skb_info, NO_TAGS);
     return;
 }
