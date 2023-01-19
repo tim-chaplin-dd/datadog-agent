@@ -29,8 +29,9 @@ import (
 )
 
 const (
-	httpInFlightMap  = "http_in_flight"
-	http2InFlightMap = "http2_in_flight"
+	httpInFlightMap        = "http_in_flight"
+	http2InFlightMap       = "http2_in_flight"
+	http2StreamInFlightMap = "http2_stream_in_flight"
 
 	// ELF section of the BPF_PROG_TYPE_SOCKET_FILTER program used
 	// to classify protocols and dispatch the correct handlers.
@@ -122,6 +123,7 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 		Maps: []*manager.Map{
 			{Name: httpInFlightMap},
 			{Name: http2InFlightMap},
+			{Name: http2StreamInFlightMap},
 			{Name: sslSockByCtxMap},
 			{Name: protocolDispatcherProgramsMap},
 			{Name: "ssl_read_args"},
@@ -221,6 +223,11 @@ func (e *ebpfProgram) Init() error {
 				EditorFlag: manager.EditMaxEntries,
 			},
 			http2InFlightMap: {
+				Type:       ebpf.Hash,
+				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
+				EditorFlag: manager.EditMaxEntries,
+			},
+			http2StreamInFlightMap: {
 				Type:       ebpf.Hash,
 				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
 				EditorFlag: manager.EditMaxEntries,

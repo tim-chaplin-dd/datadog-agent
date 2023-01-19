@@ -16,7 +16,7 @@
 #include "ip.h"
 
 /* thread_struct id too big for allocation on stack in eBPF function, we use an array as a heap allocator */
-BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_transaction_t, 1)
+BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_connection_t, 1)
 BPF_PERCPU_ARRAY_MAP(http_trans_alloc, __u32, http_transaction_t, 1)
 
 static __always_inline http2_transaction_t *http2_fetch_state(http2_transaction_t *http2, http2_packet_t packet_type) {
@@ -395,7 +395,7 @@ static __always_inline void process_frames(http2_transaction_t* http2_transactio
     }
 }
 
-static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *skb_info, http2_transaction_t *http2_conn) {
+static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *skb_info, http2_connection_t *http2_conn) {
     // src_port represents the source port number *before* normalization
     // for more context please refer to http-types.h comment on `owned_by_src_port` field
     http2_conn->owned_by_src_port = http2_conn->tup.sport;
@@ -411,8 +411,8 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
         return;
     }
 
-    process_frames(http2_conn);
-    http2_process(http2_conn, skb_info, NO_TAGS);
+//    process_frames(http2_conn);
+//    http2_process(http2_conn, skb_info, NO_TAGS);
     return;
 }
 
