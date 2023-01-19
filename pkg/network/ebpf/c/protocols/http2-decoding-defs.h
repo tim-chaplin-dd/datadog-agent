@@ -6,7 +6,7 @@
 
 // A limit of max frames we will upload from a single connection to the user mode.
 // NOTE: we may need to revisit this const if we need to capture more connections.
-#define HTTP2_MAX_FRAMES 4
+#define HTTP2_MAX_FRAMES 3
 
 // A limit of max headers frames which we except to see in the request/response.
 // NOTE: we may need to change the max size.
@@ -14,12 +14,12 @@
 
 // A limit of max frame size in order to be able to load a max size and pass the varifier.
 // NOTE: we may need to change the max size.
-#define HTTP2_MAX_PATH_LEN 32
+#define HTTP2_MAX_PATH_LEN 26
 
 #define MAX_STATIC_TABLE_INDEX 61
 
 // This determines the size of the payload fragment that is captured for each HTTP request
-#define HTTP2_BUFFER_SIZE (8 * 20)
+#define HTTP2_BUFFER_SIZE (8 * 10)
 #define HTTP2_MAX_FRAGMENT (HTTP2_BUFFER_SIZE - 1)
 
 #define HTTP2_END_OF_STREAM 0x1
@@ -50,8 +50,8 @@ typedef struct {
 } static_table_entry_t;
 
 typedef struct {
-    char buffer[32] __attribute__ ((aligned (8)));
     __u64 string_len;
+    char buffer[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
 } string_value_t;
 
 // TODO: Do we need the index? Should it be static_table_key_t?
@@ -77,29 +77,29 @@ typedef enum {
     HTTP2_POST,
 } http2_method_t;
 
-// HTTP2 transaction information associated to a certain socket (tuple_t)
-typedef struct {
-    conn_tuple_t old_tup;
-    conn_tuple_t tup;
-    __u64 request_started;
-    __u64 tags;
-    __u64 response_last_seen;
-
-    __u32 tcp_seq;
-    __u32 current_offset_in_request_fragment;
-
-    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
-
-    __u16 response_status_code;
-    __u16 owned_by_src_port;
-
-    bool end_of_stream;
-    __u8  request_method;
-    __u8  packet_type;
-    __u8  stream_id;
-    __u64  path_size;
-    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
-} http2_transaction_t;
+//// HTTP2 transaction information associated to a certain socket (tuple_t)
+//typedef struct {
+//    conn_tuple_t old_tup;
+//    conn_tuple_t tup;
+//    __u64 request_started;
+//    __u64 tags;
+//    __u64 response_last_seen;
+//
+//    __u32 tcp_seq;
+//    __u32 current_offset_in_request_fragment;
+//
+//    char request_fragment[HTTP2_BUFFER_SIZE] __attribute__ ((aligned (8)));
+//
+//    __u16 response_status_code;
+//    __u16 owned_by_src_port;
+//
+//    bool end_of_stream;
+//    __u8  request_method;
+//    __u8  packet_type;
+//    __u8  stream_id;
+//    __u64  path_size;
+//    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
+//} http2_transaction_t;
 
 typedef struct {
     conn_tuple_t tup;
@@ -118,12 +118,13 @@ typedef struct {
 
     __u16 response_status_code;
 
+    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
+
     __u8  end_of_stream;
 
     __u8  request_method;
     __u8  stream_id;
 
-    char path[HTTP2_MAX_PATH_LEN] __attribute__ ((aligned (8)));
 } http2_stream_t;
 
 typedef struct {
