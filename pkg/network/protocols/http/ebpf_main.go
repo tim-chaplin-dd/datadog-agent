@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	httpInFlightMap        = "http_in_flight"
-	http2InFlightMap       = "http2_in_flight"
+	httpInFlightMap = "http_in_flight"
+	//http2InFlightMap       = "http2_in_flight"
 	http2StreamInFlightMap = "http2_stream_in_flight"
 
 	// ELF section of the BPF_PROG_TYPE_SOCKET_FILTER program used
@@ -122,7 +122,7 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 	mgr := &manager.Manager{
 		Maps: []*manager.Map{
 			{Name: httpInFlightMap},
-			{Name: http2InFlightMap},
+			//{Name: http2InFlightMap},
 			{Name: http2StreamInFlightMap},
 			{Name: sslSockByCtxMap},
 			{Name: protocolDispatcherProgramsMap},
@@ -222,11 +222,11 @@ func (e *ebpfProgram) Init() error {
 				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
 				EditorFlag: manager.EditMaxEntries,
 			},
-			http2InFlightMap: {
-				Type:       ebpf.Hash,
-				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
-				EditorFlag: manager.EditMaxEntries,
-			},
+			//http2InFlightMap: {
+			//	Type:       ebpf.Hash,
+			//	MaxEntries: uint32(e.cfg.MaxTrackedConnections),
+			//	EditorFlag: manager.EditMaxEntries,
+			//},
 			http2StreamInFlightMap: {
 				Type:       ebpf.Hash,
 				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
@@ -432,29 +432,29 @@ func (e *ebpfProgram) setupMapCleaner() {
 }
 
 func (e *ebpfProgram) setupMapCleaner2() {
-	http2Map, _, _ := e.GetMap(http2InFlightMap)
-	http2MapCleaner, err := ddebpf.NewMapCleaner(http2Map, new(netebpf.ConnTuple), new(ebpfHttpTx))
-	if err != nil {
-		log.Errorf("error creating map cleaner: %s", err)
-		return
-	}
-
-	ttl2 := e.cfg.HTTPIdleConnectionTTL.Nanoseconds()
-	http2MapCleaner.Clean(e.cfg.HTTPMapCleanerInterval, func(now int64, key, val interface{}) bool {
-		httpTxn, ok := val.(*ebpfHttpTx)
-		if !ok {
-			return false
-		}
-
-		if updated := int64(httpTxn.ResponseLastSeen()); updated > 0 {
-			return (now - updated) > ttl2
-		}
-
-		started := int64(httpTxn.RequestStarted())
-		return started > 0 && (now-started) > ttl2
-	})
-
-	e.mapCleaner2 = http2MapCleaner
+	//http2Map, _, _ := e.GetMap(http2InFlightMap)
+	//http2MapCleaner, err := ddebpf.NewMapCleaner(http2Map, new(netebpf.ConnTuple), new(ebpfHttpTx))
+	//if err != nil {
+	//	log.Errorf("error creating map cleaner: %s", err)
+	//	return
+	//}
+	//
+	//ttl2 := e.cfg.HTTPIdleConnectionTTL.Nanoseconds()
+	//http2MapCleaner.Clean(e.cfg.HTTPMapCleanerInterval, func(now int64, key, val interface{}) bool {
+	//	httpTxn, ok := val.(*ebpfHttpTx)
+	//	if !ok {
+	//		return false
+	//	}
+	//
+	//	if updated := int64(httpTxn.ResponseLastSeen()); updated > 0 {
+	//		return (now - updated) > ttl2
+	//	}
+	//
+	//	started := int64(httpTxn.RequestStarted())
+	//	return started > 0 && (now-started) > ttl2
+	//})
+	//
+	//e.mapCleaner2 = http2MapCleaner
 }
 
 func getBytecode(c *config.Config) (bc bytecode.AssetReader, err error) {
