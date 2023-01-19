@@ -33,14 +33,14 @@ static __always_inline http2_stream_t *http2_fetch_state(http2_stream_t *http2, 
 static __always_inline http2_stream_t *http2_fetch_by_stream(conn_tuple_t* tup, __u8 stream_id) {
     // We detected either a request or a response
     // In this case we initialize (or fetch) state associated to this tuple
-    http2_stream_key_t stream_key;
+    http2_stream_key_t stream_key = {};
     stream_key.stream_id = stream_id;
     bpf_memcpy(&stream_key.tup, tup, sizeof(conn_tuple_t));
 
-    http2_stream_t http_stream;
-    bpf_memset(&http_stream, 0, sizeof(http2_stream_t));
+//    http2_stream_t http2_stream;
+//    bpf_memset(&http2_stream, 0, sizeof(http2_stream_t));
 
-    bpf_map_update_with_telemetry(http2_stream_in_flight, &stream_key, &http_stream, BPF_NOEXIST);
+//     bpf_map_update_with_telemetry(http2_stream_in_flight, &stream_key, &http2_stream, BPF_NOEXIST);
     return bpf_map_lookup_elem(&http2_stream_in_flight, &stream_key);
 }
 
@@ -71,35 +71,29 @@ static __always_inline void http2_begin_request(http2_connection_t* http2_conn, 
     bpf_memcpy(&http2_conn->request_fragment, buffer, HTTP2_BUFFER_SIZE);
 }
 
-static __always_inline int http2_process(http2_connection_t* http2_conn,  skb_info_t *skb_info,__u64 tags) {
+static __always_inline void http2_process(http2_connection_t* http2_conn, http2_stream_t* http2_stream, skb_info_t *skb_info, __u8  stream_id) {
     http2_packet_t packet_type = HTTP2_PACKET_UNKNOWN;
     http2_method_t method = HTTP2_METHOD_UNKNOWN;
     __u64 response_code;
 
-    http2_stream_t *http2_stack = bpf_map_lookup_elem(&http2_stream_in_flight, &http2_conn->old_tup);
-    if (http2_stack == NULL) {
-        log_debug("[http2] http2 stream was not found\n");
-        return 0;
-    }
+//    if (packet_type != 0){
+//        log_debug("[http2] ----------------------------------\n");
+//        log_debug("[http2] the response status code is %d\n", http2_stream->response_status_code);
+//        log_debug("[http2] the end of stream is %d\n", http2_stream->end_of_stream);
+//        log_debug("[http2] the request_method is %d\n", http2_stream->request_method);
+//        log_debug("[http2] ----------------------------------\n");
+//    }
 
-    if (packet_type != 0){
-        log_debug("[http2] ----------------------------------\n");
-        log_debug("[http2] the response status code is %d\n", http2_stack->response_status_code);
-        log_debug("[http2] the end of stream is %d\n", http2_stack->end_of_stream);
-        log_debug("[http2] the request_method is %d\n", http2_stack->request_method);
-        log_debug("[http2] ----------------------------------\n");
-    }
-
-    if (http2_stack->request_method > 0) {
+    if (http2_stream->request_method > 0) {
         packet_type = HTTP2_RESPONSE;
-    } else if (http2_stack->response_status_code > 0) {
+    } else if (http2_stream->response_status_code > 0) {
         packet_type = HTTP2_REQUEST;
     }
 
-    http2_stream_t *http2 = http2_fetch_state(http2_stack, packet_type);
+    http2_stream_t *http2 = http2_fetch_state(http2_stream, packet_type);
     if (!http2 || http2_seen_before(http2_conn, skb_info)) {
         log_debug("[http2] the http2 has been seen before!\n");
-        return 0;
+        return;
     }
 
     if (packet_type == HTTP2_REQUEST) {
@@ -111,62 +105,157 @@ static __always_inline int http2_process(http2_connection_t* http2_conn,  skb_in
         http2_update_seen_before(http2_conn, skb_info);
     }
 
-    if (http2_stack->end_of_stream == 2) {
-        http2_stream_t *trans = bpf_map_lookup_elem(&http2_in_flight, &http2_conn->old_tup);
-        if (trans != NULL) {
-            const __u32 zero = 0;
-            http_transaction_t *http = bpf_map_lookup_elem(&http_trans_alloc, &zero);
-            if (http == NULL) {
-                return 0;
-            }
-            bpf_memset(http, 0, sizeof(http_transaction_t));
-            bpf_memcpy(&http->tup, &trans->tup, sizeof(conn_tuple_t));
-
-            http->request_fragment[0] = 'z';
-            http->request_fragment[1] = http2->path_size;
-            bpf_memcpy(&http->request_fragment[8], trans->path, HTTP2_MAX_PATH_LEN);
-
-            // todo: take it out to a function?!
-            if (trans->request_method == 2) {
-                log_debug("[slavin] found http2 get");
-                method = HTTP2_GET;
-            } else if (trans->request_method == 3) {
-                log_debug("[slavin] found http2 post");
-                method = HTTP2_POST;
-            }
-
-            // todo: take it out to a function and add all the other options as well.
-            switch(http2_stack->response_status_code) {
-            case k200:
-                response_code = 200;
-                break;
-            case k204:
-                response_code = 204;
-                break;
-            case k206:
-                response_code = 206;
-                break;
-            case k400:
-                response_code = 400;
-                break;
-            case k500:
-                response_code = 500;
-                break;
-            }
-
-            http->response_status_code = response_code;
-            http->request_started = trans->request_started;
-            http->request_method = method;
-            http->response_last_seen = bpf_ktime_get_ns();
-            http->owned_by_src_port = trans->owned_by_src_port;
-            http->tcp_seq = http2_conn->tcp_seq;
-
-            http_batch_enqueue(http);
-            bpf_map_delete_elem(&http2_in_flight, &http2_stack->tup);
-        }
+    // todo: this is still a patch which we are counting the times we have seen request->response.
+    if (http2_stream->end_of_stream % 2 != 0) {
+        return;
     }
 
-    return 0;
+    http2_stream_t *trans = bpf_map_lookup_elem(&http2_in_flight, &http2_conn->old_tup);
+    if (trans == NULL) {
+        return;
+    }
+
+    const __u32 zero = 0;
+    http_transaction_t *http = bpf_map_lookup_elem(&http_trans_alloc, &zero);
+    if (http == NULL) {
+        return;
+    }
+    bpf_memset(http, 0, sizeof(http_transaction_t));
+    bpf_memcpy(&http->tup, &trans->tup, sizeof(conn_tuple_t));
+
+    http->request_fragment[0] = 'z';
+    http->request_fragment[1] = http2->path_size;
+    bpf_memcpy(&http->request_fragment[8], trans->path, HTTP2_MAX_PATH_LEN);
+
+    // todo: take it out to a function?!
+    if (trans->request_method == 2) {
+        log_debug("[slavin] found http2 get");
+        method = HTTP2_GET;
+    } else if (trans->request_method == 3) {
+        log_debug("[slavin] found http2 post");
+        method = HTTP2_POST;
+    }
+
+    // todo: take it out to a function and add all the other options as well.
+    switch(http2_stream->response_status_code) {
+    case k200:
+        response_code = 200;
+        break;
+    case k204:
+        response_code = 204;
+        break;
+    case k206:
+        response_code = 206;
+        break;
+    case k400:
+        response_code = 400;
+        break;
+    case k500:
+        response_code = 500;
+        break;
+    }
+
+    http->response_status_code = response_code;
+    http->request_started = trans->request_started;
+    http->request_method = method;
+    http->response_last_seen = bpf_ktime_get_ns();
+    http->owned_by_src_port = trans->owned_by_src_port;
+    http->tcp_seq = http2_conn->tcp_seq;
+
+    http_batch_enqueue(http);
+    bpf_map_delete_elem(&http2_in_flight, &http2_stream->tup);
+
+    return;
+}
+
+
+static __always_inline void http2_data_to_user_mode(http2_connection_t* http2_conn, http2_stream_t* http2_stream,  skb_info_t *skb_info) {
+    http2_packet_t packet_type = HTTP2_PACKET_UNKNOWN;
+    http2_method_t method = HTTP2_METHOD_UNKNOWN;
+    __u64 response_code;
+
+    if (http2_stream->request_method > 0) {
+        packet_type = HTTP2_RESPONSE;
+    } else if (http2_stream->response_status_code > 0) {
+        packet_type = HTTP2_REQUEST;
+    }
+
+    http2_stream_t *http2 = http2_fetch_state(http2_stream, packet_type);
+    if (!http2 || http2_seen_before(http2_conn, skb_info)) {
+        log_debug("[http2] the http2 has been seen before!\n");
+        return;
+    }
+
+    if (packet_type == HTTP2_REQUEST) {
+        log_debug("[http2] http2_process request: type=%d method=%d\n", packet_type, method);
+        http2_begin_request(http2_conn, http2, method, (char *)http2_conn->request_fragment);
+        http2_update_seen_before(http2_conn, skb_info);
+    } else if (packet_type == HTTP2_RESPONSE) {
+        log_debug("[http2] http2_begin_response: htx=%llx status=%d\n", http2, http2->response_status_code);
+        http2_update_seen_before(http2_conn, skb_info);
+    }
+
+    // todo: this is still a patch which we are counting the times we have seen request->response.
+    if (http2_stream->end_of_stream % 2 != 0) {
+        return;
+    }
+
+    http2_stream_t *trans = bpf_map_lookup_elem(&http2_in_flight, &http2_conn->old_tup);
+    if (trans == NULL) {
+        return;
+    }
+
+    const __u32 zero = 0;
+    http_transaction_t *http = bpf_map_lookup_elem(&http_trans_alloc, &zero);
+    if (http == NULL) {
+        return;
+    }
+    bpf_memset(http, 0, sizeof(http_transaction_t));
+    bpf_memcpy(&http->tup, &trans->tup, sizeof(conn_tuple_t));
+
+    http->request_fragment[0] = 'z';
+    http->request_fragment[1] = http2->path_size;
+    bpf_memcpy(&http->request_fragment[8], trans->path, HTTP2_MAX_PATH_LEN);
+
+    // todo: take it out to a function?!
+    if (trans->request_method == 2) {
+        log_debug("[slavin] found http2 get");
+        method = HTTP2_GET;
+    } else if (trans->request_method == 3) {
+        log_debug("[slavin] found http2 post");
+        method = HTTP2_POST;
+    }
+
+    // todo: take it out to a function and add all the other options as well.
+    switch(http2_stream->response_status_code) {
+    case k200:
+        response_code = 200;
+        break;
+    case k204:
+        response_code = 204;
+        break;
+    case k206:
+        response_code = 206;
+        break;
+    case k400:
+        response_code = 400;
+        break;
+    case k500:
+        response_code = 500;
+        break;
+    }
+
+    http->response_status_code = response_code;
+    http->request_started = trans->request_started;
+    http->request_method = method;
+    http->response_last_seen = bpf_ktime_get_ns();
+    http->owned_by_src_port = trans->owned_by_src_port;
+    http->tcp_seq = http2_conn->tcp_seq;
+
+    http_batch_enqueue(http);
+    bpf_map_delete_elem(&http2_in_flight, &http2_stream->tup);
+
+    return;
 }
 
 // read_var_int reads an unsigned variable length integer off the
@@ -348,7 +437,7 @@ static __always_inline bool process_headers(http2_connection_t* http2_conn, http
 
 #define HTTP2_END_OF_STREAM 0x1
 
-static __always_inline void process_frames(http2_connection_t* http2_conn) {
+static __always_inline void process_frames(http2_connection_t* http2_conn, skb_info_t *skb_info) {
     struct http2_frame current_frame = {};
     bool is_end_of_stream;
     bool is_data_frame_end_of_stream;
@@ -391,6 +480,7 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
             http2_stream->end_of_stream += 1;
             if (is_data_frame_end_of_stream) {
                 http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+                http2_data_to_user_mode(http2_conn, http2_stream, skb_info);
                 continue;
             }
         }
@@ -407,6 +497,8 @@ static __always_inline void process_frames(http2_connection_t* http2_conn) {
         }
         // Process headers.
         process_headers(http2_conn, http2_stream);
+        // after processing the headers we need to return the user mode.
+        http2_process(http2_conn, http2_stream, skb_info, current_frame.stream_id);
     }
 }
 
@@ -426,8 +518,7 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
         return;
     }
 
-    process_frames(http2_conn);
-    http2_process(http2_conn, skb_info, NO_TAGS);
+    process_frames(http2_conn, skb_info);
     return;
 }
 
