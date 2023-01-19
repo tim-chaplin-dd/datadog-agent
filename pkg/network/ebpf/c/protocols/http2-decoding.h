@@ -15,10 +15,6 @@
 #include "bpf_telemetry.h"
 #include "ip.h"
 
-/* thread_struct id too big for allocation on stack in eBPF function, we use an array as a heap allocator */
-BPF_PERCPU_ARRAY_MAP(http2_trans_alloc, __u32, http2_connection_t, 1)
-BPF_PERCPU_ARRAY_MAP(http_trans_alloc, __u32, http_transaction_t, 1)
-
 static __always_inline http2_transaction_t *http2_fetch_state(http2_transaction_t *http2, http2_packet_t packet_type) {
     if (packet_type == HTTP_PACKET_UNKNOWN) {
         return bpf_map_lookup_elem(&http2_in_flight, &http2->tup);
@@ -167,7 +163,7 @@ static __always_inline int http2_process(http2_transaction_t* http2_stack,  skb_
 // The returned remain buffer is either a smaller suffix of p, or err != nil.
 // The error is errNeedMore if p doesn't contain a complete integer.
 static __always_inline __u64 read_var_int(http2_transaction_t* http2_transaction, __u64 factor){
-    if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+    if (http2_transaction->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
         return false;
     }
 
@@ -280,7 +276,7 @@ static __always_inline void parse_field_literal(http2_transaction_t* http2_trans
         return;
     }
 
-    if (http2_transaction->current_offset_in_request_fragment > sizeof(http2_transaction->request_fragment)) {
+    if (http2_transaction->current_offset_in_request_fragment > HTTP2_MAX_FRAGMENT) {
         return;
     }
 
@@ -313,7 +309,7 @@ static __always_inline bool process_headers(http2_transaction_t* http2_transacti
 
 #pragma unroll
     for (unsigned headers_index = 0; headers_index < HTTP2_MAX_HEADERS_COUNT; headers_index++) {
-        remaining_length = (__s64)sizeof(http2_transaction->request_fragment) - (__s64)http2_transaction->current_offset_in_request_fragment;
+        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)http2_transaction->current_offset_in_request_fragment;
         // TODO: if remaining_length == 0, just break and return true.
         if (remaining_length <= 0) {
             return false;
@@ -337,45 +333,48 @@ static __always_inline bool process_headers(http2_transaction_t* http2_transacti
     return true;
 }
 
-#define HTTP2_END_OF_STREAM 0x1
 
-static __always_inline void process_frames(http2_transaction_t* http2_transaction) {
+static __always_inline void process_frames(http2_connection_t* http2_conn) {
     struct http2_frame current_frame = {};
     bool is_end_of_stream;
-    bool is_supported_frame;
+    bool is_data_frame_end_of_stream;
     __s64 remaining_length = 0;
 
+    http2_stream_t http2_stream2 = {};
+    http2_stream_t *http2_stream = &http2_stream2;
 #pragma unroll
     for (uint32_t frame_index = 0; frame_index < HTTP2_MAX_FRAMES; frame_index++) {
-        remaining_length = (__s64)sizeof(http2_transaction->request_fragment) - (__s64)http2_transaction->current_offset_in_request_fragment;
+        remaining_length = (__s64)HTTP2_MAX_FRAGMENT - (__s64)http2_conn->current_offset_in_request_fragment;
         // We have left less than frame header, nothing to read.
         if (HTTP2_FRAME_HEADER_SIZE > remaining_length) {
             log_debug("[http2] the HTTP2_FRAME_HEADER_SIZE is bigger then the remaining_length: %d", remaining_length);
             return;
         }
         // Reading the header.
-        if (!read_http2_frame_header(http2_transaction->request_fragment + http2_transaction->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
+        if (!read_http2_frame_header(http2_conn->request_fragment + http2_conn->current_offset_in_request_fragment, HTTP2_FRAME_HEADER_SIZE, &current_frame)){
             log_debug("[http2] unable to read_http2_frame_header");
             return;
         }
         // Modifying the offset.
-        http2_transaction->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
+        http2_conn->current_offset_in_request_fragment += HTTP2_FRAME_HEADER_SIZE;
         // Modifying the remaining length.
         remaining_length -= HTTP2_FRAME_HEADER_SIZE;
 
         is_end_of_stream = (current_frame.flags & HTTP2_END_OF_STREAM) == HTTP2_END_OF_STREAM;
-        is_supported_frame = current_frame.type == kDataFrame || current_frame.type == kHeadersFrame;
-        if (is_supported_frame && is_end_of_stream){
-            log_debug("[http2] found end of stream %d\n", current_frame.stream_id);
-            //TODO: handle_end_of_stream();
-            http2_transaction->end_of_stream = true;
+        is_data_frame_end_of_stream = is_end_of_stream && current_frame.type == kDataFrame;
+        if (!is_data_frame_end_of_stream && current_frame.type != kHeadersFrame) {
+            log_debug("[http2] frame is not supported\n");
+            // Skipping the frame payload.
+            http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+            return;
         }
 
-        if (current_frame.type != kHeadersFrame) {
-            log_debug("[http2] frame is not headers, thus skipping it\n");
-            // Skipping the frame payload.
-            http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
-            continue;
+        if (is_end_of_stream){
+            http2_stream->end_of_stream += 1;
+            if (is_data_frame_end_of_stream) {
+                http2_conn->current_offset_in_request_fragment += (__u32)current_frame.length;
+                continue;
+            }
         }
 
         log_debug("[http2] ----------\n");
@@ -389,9 +388,7 @@ static __always_inline void process_frames(http2_transaction_t* http2_transactio
             return;
         }
         // Process headers.
-        process_headers(http2_transaction);
-        // TODO: Remove when process_headers is completed.
-        http2_transaction->current_offset_in_request_fragment += (__u32)current_frame.length;
+//        process_headers(http2_conn);
     }
 }
 
@@ -411,7 +408,7 @@ static __always_inline void http2_entrypoint(struct __sk_buff *skb, skb_info_t *
         return;
     }
 
-//    process_frames(http2_conn);
+    process_frames(http2_conn);
 //    http2_process(http2_conn, skb_info, NO_TAGS);
     return;
 }

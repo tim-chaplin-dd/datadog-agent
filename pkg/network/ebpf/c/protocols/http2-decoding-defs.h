@@ -20,6 +20,9 @@
 
 // This determines the size of the payload fragment that is captured for each HTTP request
 #define HTTP2_BUFFER_SIZE (8 * 20)
+#define HTTP2_MAX_FRAGMENT (HTTP2_BUFFER_SIZE - 1)
+
+#define HTTP2_END_OF_STREAM 0x1
 
 typedef enum {
     kMethod = 2,
