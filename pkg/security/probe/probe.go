@@ -1396,6 +1396,15 @@ func NewProbe(config *config.Config, opts Opts) (*Probe, error) {
 		)
 	}
 
+	if p.kernelVersion.HavePIDLinkStruct() {
+		p.managerOptions.ConstantEditors = append(p.managerOptions.ConstantEditors,
+			manager.ConstantEditor{
+				Name:  "kernel_has_pid_link_struct",
+				Value: utils.BoolTouint64(true),
+			},
+		)
+	}
+
 	// tail calls
 	p.managerOptions.TailCallRouter = probes.AllTailRoutes(p.Config.ERPCDentryResolutionEnabled, p.Config.NetworkEnabled, useMmapableMaps)
 	if !p.Config.ERPCDentryResolutionEnabled || useMmapableMaps {
@@ -1495,6 +1504,12 @@ func AppendProbeRequestsToFetcher(constantFetcher constantfetch.ConstantFetcher,
 	constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNamePIDStructLevel, "struct pid", "level", "linux/pid.h")
 	constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNamePIDStructNumbers, "struct pid", "numbers", "linux/pid.h")
 	constantFetcher.AppendSizeofRequest(constantfetch.SizeOfUPID, "struct upid", "linux/pid.h")
+	if kv.HavePIDLinkStruct() {
+		constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNameTaskStructPIDLink, "struct task_struct", "pids", "linux/sched.h")
+		constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNamePIDLinkStructPID, "struct pid_link", "pid", "linux/pid.h")
+	} else {
+		constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNameTaskStructPID, "struct task_struct", "thread_pid", "linux/sched.h")
+	}
 
 	// splice event
 	constantFetcher.AppendOffsetofRequest(constantfetch.OffsetNamePipeInodeInfoStructBufs, "struct pipe_inode_info", "bufs", "linux/pipe_fs_i.h")

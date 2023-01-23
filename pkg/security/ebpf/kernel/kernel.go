@@ -269,3 +269,8 @@ func (k *Version) HaveRingBuffers() bool {
 	// This checks ring buffer maps, which appeared in 5.8
 	return k.Code != 0 && k.Code >= Kernel5_8 && features.HaveMapType(ebpf.RingBuf) == nil
 }
+
+// HavePIDLinkStruct returns whether the kernel uses the pid_link struct.
+func (k *Version) HavePIDLinkStruct() bool {
+	return k.Code != 0 && k.Code <= Kernel4_18
+}
