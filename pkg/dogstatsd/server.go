@@ -17,9 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/benbjohnson/clock"
-	"go.uber.org/atomic"
-
 	"github.com/DataDog/datadog-agent/pkg/aggregator"
 	"github.com/DataDog/datadog-agent/pkg/aggregator/ckey"
 	"github.com/DataDog/datadog-agent/pkg/config"
@@ -34,6 +31,10 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	"github.com/benbjohnson/clock"
+	"github.com/cihub/seelog"
+	slog "github.com/cihub/seelog"
+	"go.uber.org/atomic"
 )
 
 var (
@@ -782,6 +783,29 @@ func (s *Server) storeMetricStats(sample metrics.MetricSample) {
 	ms.Tags = strings.Join(s.debugTagsAccumulator.Get(), " ") // we don't want/need to share the underlying array
 	s.Debug.Stats[key] = ms
 
+	const DefaultDogStatsDLogFile = "/var/log/datadog/dogstatsd_stats.log"
+
+	cfg := NewSeelogConfig("dogstatsd", "Info", "Info", "", "", false)
+	cfg.EnableConsoleLog(true)
+	cfg.EnableFileLogging("var/log/datadog/dogstatsd_stats.log", config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
+
+	seelogConfigStr, err := cfg.Render()
+	if err != nil {
+		slog.Error(err)
+	}
+	logger, err := seelog.LoggerFromConfigAsString(seelogConfigStr)
+	// logger, err := slog.LoggerFromConfigAsBytes([]byte(logConfig))
+	if err != nil {
+		slog.Error(err)
+	}
+
+	slog.UseLogger(logger)
+	name := fmt.Sprintf("Metric Name: %s |", ms.Name)
+	tags := fmt.Sprintf(" Tags: {%s} |", ms.Tags)
+	count := fmt.Sprintf(" Count: %d |", ms.Count)
+	ls := fmt.Sprintln(" Last Seen : ", ms.LastSeen)
+	slog.Info(name + tags + count + ls)
+
 	s.Debug.metricsCounts.metricChan <- struct{}{}
 }
 
@@ -899,6 +923,16 @@ func FormatDebugStats(stats []byte) (string, error) {
 		stats := dogStats[key]
 		buf.Write([]byte(fmt.Sprintf("%-40s | %-20s | %-10d | %-20v\n", stats.Name, stats.Tags, stats.Count, stats.LastSeen)))
 	}
+
+	// const DefaultDogStatsDLogFile = "/var/log/datadog/dogstatsd_stats2.log"
+	// f, err := os.OpenFile(DefaultDogStatsDLogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	log.Error(err)
+	// }
+	// if buf != nil {
+	// 	os.WriteFile("/var/log/datadog/dogstatsd_stats2.log", []byte(buf.String()), 0666)
+	// }
+	// defer f.Close()
 
 	if len(dogStats) == 0 {
 		buf.Write([]byte("No metrics processed yet."))
