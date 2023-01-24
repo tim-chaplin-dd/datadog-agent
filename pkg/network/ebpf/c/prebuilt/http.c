@@ -28,6 +28,9 @@ int socket__protocol_dispatcher(struct __sk_buff *skb) {
 
 SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
+    char buf[9];
+    bpf_memset(buf, 0, 9);
+
     skb_info_t skb_info;
     http_transaction_t http;
     bpf_memset(&http, 0, sizeof(http));
