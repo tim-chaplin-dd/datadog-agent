@@ -144,16 +144,17 @@ func (e *httpEncoder) buildAggregations(payload *network.Connections) {
 			FullPath:              key.Path.FullPath,
 			Method:                model.HTTPMethod(key.Method),
 			StatsByResponseStatus: e.getDataSlice(),
+			StatsByStatusCode:     make(map[int32]*model.HTTPStats_Data),
 		}
 
 		staticTags := e.staticTags[key.KeyTuple]
 		var dynamicTags map[string]struct{}
-		for s, data := range ms.StatsByStatusCode {
-			status := uint16(s)
-			if !stats.HasStats(status) {
-				continue
+		for status, s := range stats.Data {
+			data, ok := ms.StatsByStatusCode[int32(status)]
+			if !ok {
+				ms.StatsByStatusCode[int32(status)] = &model.HTTPStats_Data{}
+				data = ms.StatsByStatusCode[int32(status)]
 			}
-			s := stats.Stats(status)
 			data.Count = uint32(s.Count)
 
 			if latencies := s.Latencies; latencies != nil {
