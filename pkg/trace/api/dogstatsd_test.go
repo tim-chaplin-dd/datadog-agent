@@ -75,16 +75,11 @@ func TestDogStatsDReverseProxy(t *testing.T) {
 	})
 }
 
-func TestDogStatsDReverseProxyEndToEndUDP(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+func testDogStatsDReverseProxyEndToEndUDP(t *testing.T, cfg *config.AgentConfig) {
 	port, err := getAvailableUDPPort()
 	if err != nil {
 		t.Skip("Couldn't find available UDP port to run test. Skipping.")
 	}
-	cfg := config.New()
-	cfg.StatsdHost = "127.0.0.1"
 	cfg.StatsdPort = port
 
 	address := fmt.Sprintf("%s:%d", cfg.StatsdHost, cfg.StatsdPort)
@@ -120,6 +115,22 @@ func TestDogStatsDReverseProxyEndToEndUDP(t *testing.T) {
 	if got, want := buf[n:], payloads[1]; !bytes.Equal(got, want) {
 		t.Errorf("got second payload: %q\nwant second payload: %q", got, want)
 	}
+}
+
+func TestDogStatsDReverseProxyEndToEndUDP(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	t.Run("ipV4", func(t *testing.T) {
+		cfg := config.New()
+		cfg.StatsdHost = "127.0.0.1"
+		testDogStatsDReverseProxyEndToEndUDP(t, cfg)
+	})
+	t.Run("ipV6", func(t *testing.T) {
+		cfg := config.New()
+		cfg.StatsdHost = "[::1]"
+		testDogStatsDReverseProxyEndToEndUDP(t, cfg)
+	})
 }
 
 // getAvailableUDPPort requests a random port number and makes sure it is available
