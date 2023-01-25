@@ -172,6 +172,9 @@ type Server struct {
 	originTelemetry bool
 
 	enrichConfig enrichConfig
+
+	// logger is an instant of the logger config that can be used to create new logger for dogstatsd-stats metrics
+	Logger *Config
 }
 
 // metricStat holds how many times a metric has been
@@ -377,6 +380,7 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 			serverlessMode:            serverless,
 			originOptOutEnabled:       config.Datadog.GetBool("dogstatsd_origin_optout_enabled"),
 		},
+		Logger: NewSeelogConfig("dogstatsd", "info", "info", "", "", false),
 	}
 
 	// packets forwarding
@@ -783,13 +787,13 @@ func (s *Server) storeMetricStats(sample metrics.MetricSample) {
 	ms.Tags = strings.Join(s.debugTagsAccumulator.Get(), " ") // we don't want/need to share the underlying array
 	s.Debug.Stats[key] = ms
 
-	const DefaultDogStatsDLogFile = "/var/log/datadog/dogstatsd_stats.log"
+	const DefaultDogStatsDLogFile = "dogstatsd_stats.log"
 
-	cfg := NewSeelogConfig("dogstatsd", "Info", "Info", "", "", false)
-	cfg.EnableConsoleLog(true)
-	cfg.EnableFileLogging("var/log/datadog/dogstatsd_stats.log", config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
+	// cfg := NewSeelogConfig("dogstatsd", "info", "info", "", "", false)
+	s.Logger.EnableConsoleLog(true)
+	s.Logger.EnableFileLogging("/statsd_log/dogstatsd_stats.log", config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
 
-	seelogConfigStr, err := cfg.Render()
+	seelogConfigStr, err := s.Logger.Render()
 	if err != nil {
 		slog.Error(err)
 	}
