@@ -145,7 +145,7 @@ profiles:
 			{
 				Name:  "1.0.8802.1.1.2.1.3.7.1.3.101",
 				Type:  gosnmp.OctetString,
-				Value: []byte{0x01, 0x00, 0x00, 0x00, 0x01, 0x03},
+				Value: []byte{0x82, 0xa5, 0x6e, 0xa5, 0xc9, 0x01},
 			},
 			{
 				Name:  "1.0.8802.1.1.2.1.4.1.1.10.0.101.1",
@@ -246,7 +246,7 @@ profiles:
 			{
 				Name:  "1.0.8802.1.1.2.1.3.7.1.3.102",
 				Type:  gosnmp.OctetString,
-				Value: []byte{0x01, 0x00, 0x00, 0x00, 0x02, 0x03},
+				Value: []byte{0x82, 0xa5, 0x6e, 0xa5, 0xc9, 0x02},
 			},
 			{
 				Name:  "1.0.8802.1.1.2.1.4.1.1.10.0.102.2",
@@ -564,14 +564,16 @@ profiles:
   ],
   "links": [
         {
+            "id": "profile-metadata:1.2.3.4:101.1",
+            "source_type": "lldp",
             "local": {
                 "device": {
                     "id": "profile-metadata:1.2.3.4",
                     "id_type": "ndm"
                 },
                 "interface": {
-                    "id": "01:00:00:00:01:03",
-                    "id_type": "mac_address"
+                    "id": "profile-metadata:1.2.3.4:1",
+                    "id_type": "ndm"
                 }
             },
             "remote": {
@@ -590,14 +592,16 @@ profiles:
             }
         },
         {
+            "id": "profile-metadata:1.2.3.4:102.2",
+            "source_type": "lldp",
             "local": {
                 "device": {
                     "id": "profile-metadata:1.2.3.4",
                     "id_type": "ndm"
                 },
                 "interface": {
-                    "id": "01:00:00:00:02:03",
-                    "id_type": "mac_address"
+                    "id": "profile-metadata:1.2.3.4:2",
+                    "id_type": "ndm"
                 }
             },
             "remote": {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CycloneDX/cyclonedx-go"
 	"github.com/mohae/deepcopy"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -636,6 +637,7 @@ type ContainerImageMetadata struct {
 	Architecture string
 	Variant      string
 	Layers       []ContainerImageLayer
+	SBOM         *SBOM
 }
 
 // ContainerImageLayer represents a layer of a container image
@@ -645,6 +647,13 @@ type ContainerImageLayer struct {
 	SizeBytes int64
 	URLs      []string
 	History   v1.History
+}
+
+// SBOM represents the Software Bill Of Materials (SBOM) of a container
+type SBOM struct {
+	CycloneDXBOM       *cyclonedx.BOM
+	GenerationTime     time.Time
+	GenerationDuration time.Duration
 }
 
 // GetID implements Entity#GetID.
@@ -689,6 +698,12 @@ func (i ContainerImageMetadata) String(verbose bool) string {
 		_, _ = fmt.Fprintln(&sb, "OS Version:", i.OSVersion)
 		_, _ = fmt.Fprintln(&sb, "Architecture:", i.Architecture)
 		_, _ = fmt.Fprintln(&sb, "Variant:", i.Variant)
+
+		if i.SBOM != nil {
+			_, _ = fmt.Fprintf(&sb, "SBOM: stored. Generated in: %.2f seconds\n", i.SBOM.GenerationDuration.Seconds())
+		} else {
+			_, _ = fmt.Fprintln(&sb, "SBOM: not stored")
+		}
 
 		_, _ = fmt.Fprintln(&sb, "----------- Layers -----------")
 		for _, layer := range i.Layers {

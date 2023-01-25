@@ -27,7 +27,9 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/version"
 
+	"github.com/benbjohnson/clock"
 	"github.com/gogo/protobuf/proto"
+	googleproto "google.golang.org/protobuf/proto"
 )
 
 const (
@@ -106,6 +108,7 @@ type MetricSerializer interface {
 
 // Serializer serializes metrics to the correct format and routes the payloads to the correct endpoint in the Forwarder
 type Serializer struct {
+	clock                 clock.Clock
 	Forwarder             forwarder.Forwarder
 	orchestratorForwarder forwarder.Forwarder
 	contlcycleForwarder   forwarder.Forwarder
@@ -134,6 +137,7 @@ type Serializer struct {
 // NewSerializer returns a new Serializer initialized
 func NewSerializer(forwarder forwarder.Forwarder, orchestratorForwarder, contlcycleForwarder, contimageForwarder, sbomForwarder forwarder.Forwarder) *Serializer {
 	s := &Serializer{
+		clock:                         clock.New(),
 		Forwarder:                     forwarder,
 		orchestratorForwarder:         orchestratorForwarder,
 		contlcycleForwarder:           contlcycleForwarder,
@@ -481,7 +485,7 @@ func (s *Serializer) SendContainerLifecycleEvent(msgs []ContainerLifecycleMessag
 	bytePayloads := transaction.NewBytesPayloadsWithoutMetaData(payloads)
 
 	extraHeaders := make(http.Header)
-	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(time.Now().Unix())))
+	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(s.clock.Now().Unix())))
 	extraHeaders.Set(headers.EVPOriginHeader, "agent")
 	extraHeaders.Set(headers.EVPOriginVersionHeader, version.AgentVersion)
 	extraHeaders.Set(headers.ContentTypeHeader, headers.ProtobufContentType)
@@ -506,7 +510,7 @@ func (s *Serializer) SendContainerImage(msgs []ContainerImageMessage, hostname s
 
 	for i := range msgs {
 		msgs[i].Host = hostname
-		encoded, err := proto.Marshal(&msgs[i])
+		encoded, err := googleproto.Marshal(&msgs[i])
 		if err != nil {
 			return log.Errorf("Unable to encode message: %+v", err)
 		}
@@ -517,7 +521,7 @@ func (s *Serializer) SendContainerImage(msgs []ContainerImageMessage, hostname s
 	bytesPayloads := transaction.NewBytesPayloadsWithoutMetaData(payloads)
 
 	extraHeaders := make(http.Header)
-	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(time.Now().Unix())))
+	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(s.clock.Now().Unix())))
 	extraHeaders.Set(headers.EVPOriginHeader, "agent")
 	extraHeaders.Set(headers.EVPOriginVersionHeader, version.AgentVersion)
 	extraHeaders.Set(headers.ContentTypeHeader, headers.ProtobufContentType)
@@ -542,7 +546,7 @@ func (s *Serializer) SendSBOM(msgs []SBOMMessage, hostname string) error {
 
 	for i := range msgs {
 		msgs[i].Host = hostname
-		encoded, err := proto.Marshal(&msgs[i])
+		encoded, err := googleproto.Marshal(&msgs[i])
 		if err != nil {
 			return log.Errorf("Unable to encode message: %+v", err)
 		}
@@ -553,7 +557,7 @@ func (s *Serializer) SendSBOM(msgs []SBOMMessage, hostname string) error {
 	bytesPayloads := transaction.NewBytesPayloadsWithoutMetaData(payloads)
 
 	extraHeaders := make(http.Header)
-	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(time.Now().Unix())))
+	extraHeaders.Set(headers.TimestampHeader, strconv.Itoa(int(s.clock.Now().Unix())))
 	extraHeaders.Set(headers.EVPOriginHeader, "agent")
 	extraHeaders.Set(headers.EVPOriginVersionHeader, version.AgentVersion)
 	extraHeaders.Set(headers.ContentTypeHeader, headers.ProtobufContentType)
