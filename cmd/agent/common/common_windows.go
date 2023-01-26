@@ -34,8 +34,6 @@ var (
 	DefaultDCALogFile = "c:\\programdata\\datadog\\logs\\cluster-agent.log"
 	//DefaultJmxLogFile points to the jmx fetch log file that will be used if not configured
 	DefaultJmxLogFile = "c:\\programdata\\datadog\\logs\\jmxfetch.log"
-	//DefaultDogstatsDLogFile points to the dogstatsd stats log file that will be used if not configured
-	DefaultDogstatsDLogFile = "c:\\programdata\\datadog\\logs\\dogstatsd-stats.log"
 	// DefaultCheckFlareDirectory a flare friendly location for checks to be written
 	DefaultCheckFlareDirectory = "c:\\programdata\\datadog\\logs\\checks\\"
 	// DefaultJMXFlareDirectory a flare friendly location for jmx command logs to be written

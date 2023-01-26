@@ -18,8 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gorilla/mux"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/api/response"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/cmd/agent/common/signals"
@@ -38,11 +36,13 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/status/health"
 	"github.com/DataDog/datadog-agent/pkg/tagger"
 	"github.com/DataDog/datadog-agent/pkg/tagger/collectors"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/grpc"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/scrubber"
 	"github.com/DataDog/datadog-agent/pkg/workloadmeta"
+	"github.com/gorilla/mux"
 )
 
 // SetupHandlers adds the specific handlers for /agent endpoints
@@ -125,6 +125,7 @@ func makeFlare(w http.ResponseWriter, r *http.Request, flare flare.Component) {
 	if jmxLogFile == "" {
 		jmxLogFile = common.DefaultJmxLogFile
 	}
+	DefaultDogstatsDLogFile := constants.DefaultDogstatsDLogFile
 
 	// If we're not in an FX app we fallback to pkgflare implementation. Once all app have been migrated to flare we
 	// could remove this.
@@ -132,9 +133,9 @@ func makeFlare(w http.ResponseWriter, r *http.Request, flare flare.Component) {
 	var err error
 	log.Infof("Making a flare")
 	if flare != nil {
-		filePath, err = flare.Create(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile}, profile, nil)
+		filePath, err = flare.Create(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, DefaultDogstatsDLogFile}, profile, nil)
 	} else {
-		filePath, err = pkgflare.CreateArchive(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile}, profile, nil)
+		filePath, err = pkgflare.CreateArchive(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, DefaultDogstatsDLogFile}, profile, nil)
 	}
 
 	if err != nil || filePath == "" {

@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/pkg/aggregator"
 	"github.com/DataDog/datadog-agent/pkg/aggregator/ckey"
 	"github.com/DataDog/datadog-agent/pkg/config"
@@ -30,6 +29,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/tagset"
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/benbjohnson/clock"
@@ -355,7 +355,7 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 		false)
 
 	// Configuring the log file path
-	logFile := common.DefaultDogstatsDLogFile
+	logFile := constants.DefaultDogstatsDLogFile
 
 	// Configure the logger
 	cfg.EnableFileLogging(logFile, config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
@@ -816,7 +816,7 @@ func (s *Server) storeMetricStats(sample metrics.MetricSample) {
 	name := fmt.Sprintf("Metric Name: %s |", ms.Name)
 	tags := fmt.Sprintf(" Tags: {%s} |", ms.Tags)
 	count := fmt.Sprintf(" Count: %d |", ms.Count)
-	ls := fmt.Sprintln(" Last Seen : ", ms.LastSeen)
+	ls := fmt.Sprintf(" Last Seen : %d", ms.LastSeen)
 
 	s.Logger.Info(name + tags + count + ls)
 

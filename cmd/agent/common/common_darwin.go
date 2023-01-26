@@ -18,8 +18,6 @@ const (
 	DefaultDCALogFile = "/opt/datadog-agent/logs/cluster-agent.log"
 	//DefaultJmxLogFile points to the jmx fetch log file that will be used if not configured
 	DefaultJmxLogFile = "/opt/datadog-agent/logs/jmxfetch.log"
-	//DefaultDogstatsDLogFile points to the dogstatsd stats log file that will be used if not configured
-	DefaultDogstatsDLogFile = "/opt/datadog-agent/logs/dogstatsd-stats.log"
 	// DefaultCheckFlareDirectory a flare friendly location for checks to be written
 	DefaultCheckFlareDirectory = "/opt/datadog-agent/logs/checks/"
 	// DefaultJMXFlareDirectory a flare friendly location for jmx command logs to be written
