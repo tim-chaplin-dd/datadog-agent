@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/pkg/aggregator"
 	"github.com/DataDog/datadog-agent/pkg/aggregator/ckey"
 	"github.com/DataDog/datadog-agent/pkg/config"
@@ -345,11 +346,19 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 	}
 
 	// Creating a new logger
-	cfg := NewSeelogConfig("dogstatsd", "info", "common", "", "", false)
-	// Configuring the logger
-	const DefaultDogStatsDLogFile = "/tmp/dogstatsd_log/dogstatsd_stats.log"
-	// s.Logger.EnableConsoleLog(true)
-	cfg.EnableFileLogging(DefaultDogStatsDLogFile, config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
+	cfg := NewSeelogConfig(
+		"dogstatsd",
+		"info",
+		"common",
+		"",
+		"%n %Date %Time | [DOGSTATSD_STATSD] | [%LEV] %Msg %n",
+		false)
+
+	// Configuring the log file path
+	logFile := common.DefaultDogstatsDLogFile
+
+	// Configure the logger
+	cfg.EnableFileLogging(logFile, config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
 
 	seelogConfigStr, err := cfg.Render()
 	if err != nil {
