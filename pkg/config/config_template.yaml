@@ -1738,6 +1738,20 @@ api_key:
 #
 # dogstatsd_stats_enable: false
 
+## @param dogstatsd_log_file - string - optional
+## @env DD_DOGSTATSD_LOG_FILE - string - optional
+## Path of the log file where dogstatsd stats logs are written.
+## To get dogstatsd logs, dogstatsd_stats_enable is required to set to true.
+# 
+# dogstatsd_log_file: <DOGSTATSD_STATS_LOG_FILE_PATH>
+
+## @param dogstatsd_log_file_max_rolls - integer - optional - default: 3
+## @env DD_DOGSTATSD_LOG_FILE_MAX_ROLLS - integer - optional - default: 3
+## Maximum amount of "old" log files to keep.
+## Set to 0 to not limit the number of files to create.
+#
+# dogstatsd_log_file_max_rolls: 3
+
 ## @param dogstatsd_queue_size - integer - optional - default: 1024
 ## @env DD_DOGSTATSD_QUEUE_SIZE - integer - optional - default: 1024
 ## Configure the internal queue size of the Dogstatsd server.
@@ -2031,13 +2045,6 @@ api_key:
 ## Set to 0 to not limit the number of files to create.
 #
 # log_file_max_rolls: 1
-
-## @param dogstatsd_log_file_max_rolls - integer - optional - default: 3
-## @env DD_DOGSTATSD_LOG_FILE_MAX_ROLLS - integer - optional - default: 3
-## Maximum amount of "old" log files to keep.
-## Set to 0 to not limit the number of files to create.
-#
-# dogstatsd_log_file_max_rolls: 3
 
 ## @param log_to_syslog - boolean - optional - default: false
 ## @env DD_LOG_TO_SYSLOG - boolean - optional - default: false

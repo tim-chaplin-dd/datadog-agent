@@ -355,7 +355,10 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 		false)
 
 	// Configuring the log file path
-	logFile := constants.DefaultDogstatsDLogFile
+	logFile := config.Datadog.GetString("dogstatsd_log_file")
+	if logFile == "" {
+		logFile = constants.DefaultDogstatsDLogFile
+	}
 
 	// Configuring max roll for log file, if dogstatsd_log_file_max_rolls env var is not set within datadog.yaml then default value is 3
 	dogstatsd_log_file_max_rolls := config.Datadog.GetInt64("dogstatsd_log_file_max_rolls")
