@@ -357,8 +357,14 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 	// Configuring the log file path
 	logFile := constants.DefaultDogstatsDLogFile
 
+	// Configuring max roll for log file, if dogstatsd_log_file_max_rolls env var is not set within datadog.yaml then default value is 3
+	dogstatsd_log_file_max_rolls := config.Datadog.GetInt64("dogstatsd_log_file_max_rolls")
+	if dogstatsd_log_file_max_rolls != 3 {
+		config.Datadog.Set("dogstatsd_log_file_max_rolls", dogstatsd_log_file_max_rolls)
+	}
+
 	// Configure the logger
-	cfg.EnableFileLogging(logFile, config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("log_file_max_rolls")))
+	cfg.EnableFileLogging(logFile, config.Datadog.GetSizeInBytes("log_file_max_size"), uint(config.Datadog.GetInt("dogstatsd_log_file_max_rolls")))
 
 	seelogConfigStr, err := cfg.Render()
 	if err != nil {
@@ -937,16 +943,6 @@ func FormatDebugStats(stats []byte) (string, error) {
 		stats := dogStats[key]
 		buf.Write([]byte(fmt.Sprintf("%-40s | %-20s | %-10d | %-20v\n", stats.Name, stats.Tags, stats.Count, stats.LastSeen)))
 	}
-
-	// const DefaultDogStatsDLogFile = "/var/log/datadog/dogstatsd_stats2.log"
-	// f, err := os.OpenFile(DefaultDogStatsDLogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-	// if buf != nil {
-	// 	os.WriteFile("/var/log/datadog/dogstatsd_stats2.log", []byte(buf.String()), 0666)
-	// }
-	// defer f.Close()
 
 	if len(dogStats) == 0 {
 		buf.Write([]byte("No metrics processed yet."))

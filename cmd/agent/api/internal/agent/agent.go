@@ -125,7 +125,7 @@ func makeFlare(w http.ResponseWriter, r *http.Request, flare flare.Component) {
 	if jmxLogFile == "" {
 		jmxLogFile = common.DefaultJmxLogFile
 	}
-	DefaultDogstatsDLogFile := constants.DefaultDogstatsDLogFile
+	dogstatsDLogFile := constants.DefaultDogstatsDLogFile
 
 	// If we're not in an FX app we fallback to pkgflare implementation. Once all app have been migrated to flare we
 	// could remove this.
@@ -133,9 +133,9 @@ func makeFlare(w http.ResponseWriter, r *http.Request, flare flare.Component) {
 	var err error
 	log.Infof("Making a flare")
 	if flare != nil {
-		filePath, err = flare.Create(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, DefaultDogstatsDLogFile}, profile, nil)
+		filePath, err = flare.Create(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, dogstatsDLogFile}, profile, nil)
 	} else {
-		filePath, err = pkgflare.CreateArchive(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, DefaultDogstatsDLogFile}, profile, nil)
+		filePath, err = pkgflare.CreateArchive(false, common.GetDistPath(), common.PyChecksPath, []string{logFile, jmxLogFile, dogstatsDLogFile}, profile, nil)
 	}
 
 	if err != nil || filePath == "" {

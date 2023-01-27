@@ -2032,6 +2032,13 @@ api_key:
 #
 # log_file_max_rolls: 1
 
+## @param dogstatsd_log_file_max_rolls - integer - optional - default: 3
+## @env DD_DOGSTATSD_LOG_FILE_MAX_ROLLS - integer - optional - default: 3
+## Maximum amount of "old" log files to keep.
+## Set to 0 to not limit the number of files to create.
+#
+# dogstatsd_log_file_max_rolls: 3
+
 ## @param log_to_syslog - boolean - optional - default: false
 ## @env DD_LOG_TO_SYSLOG - boolean - optional - default: false
 ## Set to 'true' to enable logging to syslog.

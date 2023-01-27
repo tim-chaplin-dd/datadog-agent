@@ -248,6 +248,7 @@ func InitConfig(config Config) {
 	config.BindEnvAndSetDefault("log_file", "")
 	config.BindEnvAndSetDefault("log_file_max_size", "10Mb")
 	config.BindEnvAndSetDefault("log_file_max_rolls", 1)
+	config.BindEnvAndSetDefault("dogstatsd_log_file_max_rolls", 3)
 	config.BindEnvAndSetDefault("log_level", "info")
 	config.BindEnvAndSetDefault("log_to_syslog", false)
 	config.BindEnvAndSetDefault("log_to_console", true)
