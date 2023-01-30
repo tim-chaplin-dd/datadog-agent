@@ -37,6 +37,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/serializer"
 	"github.com/DataDog/datadog-agent/pkg/status/health"
 	"github.com/DataDog/datadog-agent/pkg/util/cloudproviders/cloudfoundry"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/version"
@@ -127,7 +128,7 @@ func run(cmd *cobra.Command, args []string) error {
 	syslogURI := config.GetSyslogURI()
 	logFile := config.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultDCALogFile
+		logFile = constants.DefaultDCALogFile
 	}
 	if config.Datadog.GetBool("disable_file_logging") {
 		// this will prevent any logging on file

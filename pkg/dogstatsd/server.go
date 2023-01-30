@@ -20,6 +20,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/aggregator"
 	"github.com/DataDog/datadog-agent/pkg/aggregator/ckey"
 	"github.com/DataDog/datadog-agent/pkg/config"
+	seelogCfg "github.com/DataDog/datadog-agent/pkg/config/seelog"
 	"github.com/DataDog/datadog-agent/pkg/dogstatsd/internal/mapper"
 	"github.com/DataDog/datadog-agent/pkg/dogstatsd/listeners"
 	"github.com/DataDog/datadog-agent/pkg/dogstatsd/packets"
@@ -173,8 +174,8 @@ type Server struct {
 
 	enrichConfig enrichConfig
 
-	// logger is an instant of the logger config that can be used to create new logger for dogstatsd-stats metrics
-	Logger slog.LoggerInterface
+	// logger is an instance of the logger config that can be used to create new logger for dogstatsd-stats metrics
+	DogstatsdDebugLogger slog.LoggerInterface
 }
 
 // metricStat holds how many times a metric has been
@@ -346,12 +347,12 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 	}
 
 	// Creating a new logger
-	cfg := NewSeelogConfig(
+	cfg := seelogCfg.NewSeelogConfig(
 		"dogstatsd",
 		"info",
 		"common",
 		"",
-		"%n %Date %Time | [DOGSTATSD_STATSD] | [%LEV] %Msg %n",
+		"%n %Date %Time | [DOGSTATSD_STATS] | [%LEV] %Msg ",
 		false)
 
 	// Configuring the log file path
@@ -362,7 +363,7 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 
 	// Configuring max roll for log file, if dogstatsd_log_file_max_rolls env var is not set within datadog.yaml then default value is 3
 	dogstatsd_log_file_max_rolls := config.Datadog.GetInt64("dogstatsd_log_file_max_rolls")
-	if dogstatsd_log_file_max_rolls != 3 {
+	if dogstatsd_log_file_max_rolls == 0 {
 		config.Datadog.Set("dogstatsd_log_file_max_rolls", dogstatsd_log_file_max_rolls)
 	}
 
@@ -377,8 +378,6 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 	if err != nil {
 		slog.Error(err)
 	}
-
-	// slog.UseLogger(logger)
 
 	s := &Server{
 		Started:                 true,
@@ -415,7 +414,7 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 			serverlessMode:            serverless,
 			originOptOutEnabled:       config.Datadog.GetBool("dogstatsd_origin_optout_enabled"),
 		},
-		Logger: logger,
+		DogstatsdDebugLogger: logger,
 	}
 
 	// packets forwarding
@@ -825,9 +824,9 @@ func (s *Server) storeMetricStats(sample metrics.MetricSample) {
 	name := fmt.Sprintf("Metric Name: %s |", ms.Name)
 	tags := fmt.Sprintf(" Tags: {%s} |", ms.Tags)
 	count := fmt.Sprintf(" Count: %d |", ms.Count)
-	ls := fmt.Sprintf(" Last Seen : %d", ms.LastSeen)
+	ls := fmt.Sprintln(" Last Seen : ", ms.LastSeen)
 
-	s.Logger.Info(name + tags + count + ls)
+	s.StatsLogger.Info(name + tags + count + ls)
 
 	s.Debug.metricsCounts.metricChan <- struct{}{}
 }

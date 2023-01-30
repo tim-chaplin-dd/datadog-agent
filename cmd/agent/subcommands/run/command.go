@@ -20,10 +20,6 @@ import (
 
 	_ "net/http/pprof" // Blank import used because this isn't directly used in this file
 
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/api"
 	"github.com/DataDog/datadog-agent/cmd/agent/command"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
@@ -57,11 +53,15 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/DataDog/datadog-agent/pkg/util/cloudproviders"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/flavor"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	pkglog "github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/version"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 
 	// runtime init routines
 	ddruntime "github.com/DataDog/datadog-agent/pkg/runtime"
@@ -119,7 +119,7 @@ func Commands(globalParams *command.GlobalParams) []*cobra.Command {
 			fx.Supply(cliParams),
 			fx.Supply(core.BundleParams{
 				ConfigParams: config.NewAgentParamsWithSecrets(globalParams.ConfFilePath),
-				LogParams:    log.LogForDaemon("CORE", "log_file", common.DefaultLogFile)}),
+				LogParams:    log.LogForDaemon("CORE", "log_file", constants.DefaultLogFile)}),
 			core.Bundle,
 		)
 	}
@@ -205,7 +205,7 @@ func StartAgentWithDefaults() error {
 		// no config file path specification in this situation
 		fx.Supply(core.BundleParams{
 			ConfigParams: config.NewAgentParamsWithSecrets(""),
-			LogParams:    log.LogForDaemon("CORE", "log_file", common.DefaultLogFile)}),
+			LogParams:    log.LogForDaemon("CORE", "log_file", constants.DefaultLogFile)}),
 		core.Bundle,
 	)
 }
@@ -221,7 +221,7 @@ func startAgent(cliParams *cliParams, flare flare.Component) error {
 	syslogURI := pkgconfig.GetSyslogURI()
 	jmxLogFile := pkgconfig.Datadog.GetString("jmx_log_file")
 	if jmxLogFile == "" {
-		jmxLogFile = common.DefaultJmxLogFile
+		jmxLogFile = constants.DefaultJmxLogFile
 	}
 
 	if pkgconfig.Datadog.GetBool("disable_file_logging") {

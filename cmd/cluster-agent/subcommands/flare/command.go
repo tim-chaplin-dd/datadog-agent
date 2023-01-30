@@ -21,6 +21,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/api/util"
 	pkgconfig "github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/flare"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/input"
 	"github.com/fatih/color"
@@ -82,7 +83,7 @@ func run(log log.Component, config config.Component, cliParams *cliParams) error
 
 	logFile := pkgconfig.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultDCALogFile
+		logFile = constants.DefaultDCALogFile
 	}
 
 	// Set session token

@@ -12,14 +12,14 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/pkg/api/util"
 	"github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/flare"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/input"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -85,7 +85,7 @@ func requestFlare(caseID string) error {
 
 	logFile := config.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultDCALogFile
+		logFile = constants.DefaultDCALogFile
 	}
 
 	// Set session token

@@ -13,11 +13,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/fatih/color"
-	"github.com/hashicorp/go-multierror"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/command"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/comp/core"
@@ -27,8 +22,13 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/api/util"
 	pkgconfig "github.com/DataDog/datadog-agent/pkg/config"
 	pkgflare "github.com/DataDog/datadog-agent/pkg/flare"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/input"
+	"github.com/fatih/color"
+	"github.com/hashicorp/go-multierror"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 )
 
 // cliParams are the command-line arguments for this subcommand
@@ -64,7 +64,7 @@ func Commands(globalParams *command.GlobalParams) []*cobra.Command {
 			cliParams.args = args
 			config := config.NewAgentParamsWithSecrets(globalParams.ConfFilePath,
 				config.WithSecurityAgentConfigFilePaths([]string{
-					path.Join(common.DefaultConfPath, "security-agent.yaml"),
+					path.Join(constants.DefaultConfPath, "security-agent.yaml"),
 				}),
 				config.WithConfigLoadSecurityAgent(true),
 				config.WithSysProbeConfFilePath(globalParams.SysProbeConfFilePath),
@@ -193,11 +193,11 @@ func makeFlare(flare flare.Component, log log.Component, config config.Component
 
 	logFile := pkgconfig.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultLogFile
+		logFile = constants.DefaultLogFile
 	}
 	jmxLogFile := pkgconfig.Datadog.GetString("jmx_log_file")
 	if jmxLogFile == "" {
-		jmxLogFile = common.DefaultJmxLogFile
+		jmxLogFile = constants.DefaultJmxLogFile
 	}
 	logFiles := []string{logFile, jmxLogFile}
 

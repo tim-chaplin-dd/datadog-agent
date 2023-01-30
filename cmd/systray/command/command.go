@@ -13,15 +13,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
-
-	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/comp/core"
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	"github.com/DataDog/datadog-agent/comp/core/log"
 	"github.com/DataDog/datadog-agent/comp/systray/systray"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/winutil"
+	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
 
@@ -73,7 +72,7 @@ func MakeCommand() *cobra.Command {
 			return fxutil.Run(
 				// core
 				fx.Supply(core.BundleParams{
-					ConfigParams: config.NewParams(common.DefaultConfPath),
+					ConfigParams: config.NewParams(constants.DefaultConfPath),
 					LogParams:    logParams,
 				}),
 				core.Bundle,

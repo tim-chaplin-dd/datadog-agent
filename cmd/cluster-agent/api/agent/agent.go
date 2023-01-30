@@ -14,8 +14,6 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/gorilla/mux"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/api/response"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/cmd/agent/common/signals"
@@ -27,10 +25,12 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/status/health"
 	"github.com/DataDog/datadog-agent/pkg/tagger"
 	"github.com/DataDog/datadog-agent/pkg/tagger/collectors"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/version"
 	"github.com/DataDog/datadog-agent/pkg/workloadmeta"
+	"github.com/gorilla/mux"
 )
 
 // SetupHandlers adds the specific handlers for cluster agent endpoints
@@ -127,7 +127,7 @@ func makeFlare(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	logFile := config.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultDCALogFile
+		logFile = constants.DefaultDCALogFile
 	}
 	filePath, err := flare.CreateDCAArchive(false, common.GetDistPath(), logFile)
 	if err != nil || filePath == "" {

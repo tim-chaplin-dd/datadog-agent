@@ -18,9 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-
 	"github.com/DataDog/datadog-agent/cmd/agent/command"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/comp/core"
@@ -30,7 +27,10 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/cli/standalone"
 	"github.com/DataDog/datadog-agent/pkg/collector"
 	pkgconfig "github.com/DataDog/datadog-agent/pkg/config"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 )
 
 type cliParams struct {
@@ -77,7 +77,7 @@ func Commands(globalParams *command.GlobalParams) []*cobra.Command {
 		if cliParams.saveFlare {
 			// Windows cannot accept ":" in file names
 			filenameSafeTimeStamp := strings.ReplaceAll(time.Now().UTC().Format(time.RFC3339), ":", "-")
-			cliParams.logFile = filepath.Join(common.DefaultJMXFlareDirectory, "jmx_"+cliParams.command+"_"+filenameSafeTimeStamp+".log")
+			cliParams.logFile = filepath.Join(constants.DefaultJMXFlareDirectory, "jmx_"+cliParams.command+"_"+filenameSafeTimeStamp+".log")
 			cliParams.jmxLogLevel = "debug"
 		}
 

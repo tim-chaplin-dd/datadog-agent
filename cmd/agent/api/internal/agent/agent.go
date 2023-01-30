@@ -119,11 +119,11 @@ func makeFlare(w http.ResponseWriter, r *http.Request, flare flare.Component) {
 
 	logFile := config.Datadog.GetString("log_file")
 	if logFile == "" {
-		logFile = common.DefaultLogFile
+		logFile = constants.DefaultLogFile
 	}
 	jmxLogFile := config.Datadog.GetString("jmx_log_file")
 	if jmxLogFile == "" {
-		jmxLogFile = common.DefaultJmxLogFile
+		jmxLogFile = constants.DefaultJmxLogFile
 	}
 	dogstatsDLogFile := constants.DefaultDogstatsDLogFile
 
