@@ -352,7 +352,7 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 		"info",
 		"common",
 		"",
-		"%n %Date %Time | [DOGSTATSD_STATS] | [%LEV] %Msg ",
+		"%Date %Time | [DOGSTATSD_STATS] | [%LEV] %Msg ",
 		false)
 
 	// Configuring the log file path
