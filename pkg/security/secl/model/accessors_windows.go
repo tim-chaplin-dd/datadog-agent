@@ -1,3 +1,6 @@
+//go:build windows && npm
+// +build windows,npm
+
 // Code generated - DO NOT EDIT.
 package model
 
