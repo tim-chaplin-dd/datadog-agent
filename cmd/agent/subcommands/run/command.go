@@ -20,6 +20,10 @@ import (
 
 	_ "net/http/pprof" // Blank import used because this isn't directly used in this file
 
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
+
 	"github.com/DataDog/datadog-agent/cmd/agent/api"
 	"github.com/DataDog/datadog-agent/cmd/agent/command"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
@@ -59,9 +63,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	pkglog "github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/version"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 
 	// runtime init routines
 	ddruntime "github.com/DataDog/datadog-agent/pkg/runtime"

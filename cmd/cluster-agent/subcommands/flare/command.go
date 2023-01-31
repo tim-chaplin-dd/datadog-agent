@@ -13,6 +13,10 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/cmd/cluster-agent/command"
 	"github.com/DataDog/datadog-agent/comp/core"
@@ -24,9 +28,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/input"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
 )
 
 type cliParams struct {

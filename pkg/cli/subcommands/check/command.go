@@ -19,6 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+	"gopkg.in/yaml.v2"
+
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/comp/core"
 	"github.com/DataDog/datadog-agent/comp/core/config"
@@ -36,10 +41,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/scrubber"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"gopkg.in/yaml.v2"
 )
 
 // cliParams are the command-line arguments for this subcommand

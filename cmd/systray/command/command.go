@@ -13,6 +13,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+
 	"github.com/DataDog/datadog-agent/comp/core"
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	"github.com/DataDog/datadog-agent/comp/core/log"
@@ -20,8 +23,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/winutil"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
 )
 
 const (

@@ -14,15 +14,16 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/lxn/win"
+	"go.uber.org/atomic"
+	"golang.org/x/sys/windows"
+
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/pkg/api/util"
 	"github.com/DataDog/datadog-agent/pkg/config"
 	pkgflare "github.com/DataDog/datadog-agent/pkg/flare"
 	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	pkglog "github.com/DataDog/datadog-agent/pkg/util/log"
-	"github.com/lxn/win"
-	"go.uber.org/atomic"
-	"golang.org/x/sys/windows"
 )
 
 const (

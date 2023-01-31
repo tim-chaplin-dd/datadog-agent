@@ -18,6 +18,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/DataDog/datadog-agent/cmd/agent/api/response"
 	"github.com/DataDog/datadog-agent/cmd/agent/common"
 	"github.com/DataDog/datadog-agent/cmd/agent/common/signals"
@@ -42,7 +44,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/scrubber"
 	"github.com/DataDog/datadog-agent/pkg/workloadmeta"
-	"github.com/gorilla/mux"
 )
 
 // SetupHandlers adds the specific handlers for /agent endpoints

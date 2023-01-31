@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/DataDog/datadog-agent/cmd/security-agent/flags"
-	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/DataDog/datadog-agent/cmd/security-agent/flags"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 )
 
 type GlobalParams struct {

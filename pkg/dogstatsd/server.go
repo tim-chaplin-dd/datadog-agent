@@ -17,6 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
+	slog "github.com/cihub/seelog"
+	"go.uber.org/atomic"
+
 	"github.com/DataDog/datadog-agent/pkg/aggregator"
 	"github.com/DataDog/datadog-agent/pkg/aggregator/ckey"
 	"github.com/DataDog/datadog-agent/pkg/config"
@@ -33,9 +37,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
-	"github.com/benbjohnson/clock"
-	slog "github.com/cihub/seelog"
-	"go.uber.org/atomic"
 )
 
 var (
@@ -826,7 +827,7 @@ func (s *Server) storeMetricStats(sample metrics.MetricSample) {
 	count := fmt.Sprintf(" Count: %d |", ms.Count)
 	ls := fmt.Sprintln(" Last Seen : ", ms.LastSeen)
 
-	s.StatsLogger.Info(name + tags + count + ls)
+	s.DogstatsdDebugLogger.Info(name + tags + count + ls)
 
 	s.Debug.metricsCounts.metricChan <- struct{}{}
 }
