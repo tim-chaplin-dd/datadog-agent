@@ -15,6 +15,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/autodiscovery/integration"
 	"github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/config/settings"
+	"github.com/DataDog/datadog-agent/pkg/util/constants"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 
 	"github.com/DataDog/viper"
@@ -59,7 +60,7 @@ func setupConfig(confFilePath string, configName string, withoutSecrets bool, fa
 			config.Datadog.SetConfigFile(confFilePath)
 		}
 	}
-	config.Datadog.AddConfigPath(DefaultConfPath)
+	config.Datadog.AddConfigPath(constants.DefaultConfPath)
 	// load the configuration
 	var err error
 	var warnings *config.Warnings

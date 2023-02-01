@@ -175,7 +175,7 @@ type Server struct {
 
 	enrichConfig enrichConfig
 
-	// logger is an instance of the logger config that can be used to create new logger for dogstatsd-stats metrics
+	// DogstatsdDebugLogger is an instance of the logger config that can be used to create new logger for dogstatsd-stats metrics
 	DogstatsdDebugLogger slog.LoggerInterface
 }
 
@@ -373,11 +373,11 @@ func NewServer(demultiplexer aggregator.Demultiplexer, serverless bool) (*Server
 
 	seelogConfigStr, err := cfg.Render()
 	if err != nil {
-		slog.Error(err)
+		log.Error(err)
 	}
 	logger, err := slog.LoggerFromConfigAsString(seelogConfigStr)
 	if err != nil {
-		slog.Error(err)
+		log.Error(err)
 	}
 
 	s := &Server{
