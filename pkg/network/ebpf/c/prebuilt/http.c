@@ -52,7 +52,7 @@ int socket__http_filter(struct __sk_buff* skb) {
     http.owned_by_src_port = http.tup.sport;
     normalize_tuple(&http.tup);
 
-    read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
+    read_into_buffer_skb((char *)http.request_fragment, skb, skb_info.data_off);
     http_process(&http, &skb_info, NO_TAGS);
     return 0;
 }
