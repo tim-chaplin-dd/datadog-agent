@@ -1,0 +1,8 @@
+---
+features:
+  - |
+    Enabling `dogstatsd_metrics_stats_enable` will now generate dogstatsd log files at:
+      - For `Windows`: `c:\programdata\datadog\logs\dogstatsd_info\dogstatsd-stats.log`
+      - For `Linux`: `/var/log/datadog/dogstatsd_info/dogstatsd-stats.log`
+      - For `MacOS`: `/opt/datadog-agent/logs/dogstatsd_info/dogstatsd-stats.log`
+    These log files will also be automatically attached to the flare  
