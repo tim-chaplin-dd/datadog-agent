@@ -10,20 +10,23 @@ package check
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/DataDog/datadog-agent/cmd/security-agent/command"
 	"github.com/DataDog/datadog-agent/cmd/security-agent/flags"
 	"github.com/DataDog/datadog-agent/comp/core"
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	"github.com/DataDog/datadog-agent/comp/core/log"
-	"github.com/DataDog/datadog-agent/pkg/compliance/agent"
-	"github.com/DataDog/datadog-agent/pkg/compliance/checks"
+	"github.com/DataDog/datadog-agent/pkg/compliance"
 	"github.com/DataDog/datadog-agent/pkg/util/flavor"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	"github.com/DataDog/datadog-agent/pkg/util/hostname"
@@ -90,9 +93,7 @@ func commandsWrapped(bundleParamsFactory func() core.BundleParams) []*cobra.Comm
 	cmd.Flags().BoolVarP(&checkArgs.verbose, flags.Verbose, "v", false, "Include verbose details")
 	cmd.Flags().BoolVarP(&checkArgs.report, flags.Report, "r", false, "Send report")
 	cmd.Flags().StringVarP(&checkArgs.overrideRegoInput, flags.OverrideRegoInput, "", "", "Rego input to use when running rego checks")
-	cmd.Flags().StringVarP(&checkArgs.dumpRegoInput, flags.DumpRegoInput, "", "", "Path to file where to dump the Rego input JSON")
 	cmd.Flags().StringVarP(&checkArgs.dumpReports, flags.DumpReports, "", "", "Path to file where to dump reports")
-	cmd.Flags().BoolVarP(&checkArgs.skipRegoEval, flags.SkipRegoEval, "", false, "Skip rego evaluation")
 
 	return []*cobra.Command{cmd}
 }
@@ -102,83 +103,156 @@ func RunCheck(log log.Component, config config.Component, checkArgs *CliParams) 
 		return errors.New("skipping the rego evaluation does not allow the generation of reports")
 	}
 
-	options := []checks.BuilderOption{}
-
-	if flavor.GetFlavor() == flavor.ClusterAgent {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		log.Info("Waiting for APIClient")
-		apiCl, err := apiserver.WaitForAPIClient(ctx)
-		if err != nil {
-			return err
-		}
-		options = append(options, checks.MayFail(checks.WithKubernetesClient(apiCl.DynamicCl, "")))
-	} else {
-		options = append(options, []checks.BuilderOption{
-			checks.WithHostRootMount(os.Getenv("HOST_ROOT")),
-			checks.MayFail(checks.WithDocker()),
-			checks.MayFail(checks.WithAudit()),
-		}...)
-	}
-
-	var ruleID string
-	if len(checkArgs.args) != 0 {
-		ruleID = checkArgs.args[0]
-	}
-
 	hname, err := hostname.Get(context.TODO())
 	if err != nil {
 		return err
 	}
 
-	options = append(options, checks.WithHostname(hname))
+	var resolver compliance.Resolver
+	if checkArgs.overrideRegoInput != "" {
+		resolver = &fakeResolver{}
+	} else if flavor.GetFlavor() == flavor.ClusterAgent {
+		resolver = compliance.NewResolver(compliance.ResolverOptions{
+			Hostname:           hname,
+			DockerProvider:     compliance.DefaultDockerProvider,
+			LinuxAuditProvider: compliance.DefaultLinuxAuditProvider,
+			KubernetesProvider: complianceKubernetesProvider,
+		})
+	} else {
+		fmt.Println("coucou")
+		resolver = compliance.NewResolver(compliance.ResolverOptions{
+			Hostname:           hname,
+			HostRoot:           os.Getenv("HOST_ROOT"),
+			DockerProvider:     compliance.DefaultDockerProvider,
+			LinuxAuditProvider: compliance.DefaultLinuxAuditProvider,
+		})
+	}
+	defer resolver.Close()
 
+	configDir := config.GetString("compliance_config.dir")
+	var benchmarks []*compliance.Benchmark
+	if checkArgs.file != "" {
+		benchmarks, err = compliance.LoadBenchmarkFiles(filepath.Dir(checkArgs.file), filepath.Base(checkArgs.file))
+		if err != nil {
+			log.Errorf("Could not load benchmark file %q: %s", checkArgs.file, err)
+			return err
+		}
+	} else if checkArgs.framework != "" {
+		benchmarks, err = compliance.LoadBenchmarkFiles(configDir, checkArgs.framework+".yaml")
+		if err != nil {
+			log.Errorf("Could not load benchmark file %q: %s", checkArgs.file, err)
+			return err
+		}
+	} else {
+		benchmarks, err = compliance.LoadBenchmarkFiles(configDir, compliance.ListBenchmarksFiles(configDir)...)
+		if err != nil {
+			log.Errorf("Could not load benchmark file %q: %s", checkArgs.file, err)
+			return err
+		}
+	}
+
+	// options = append(options, checks.WithRegoEvalSkip(checkArgs.skipRegoEval))
+	// options = append(options, checks.WithRegoInputDumpPath(checkArgs.dumpRegoInput))
+
+	if len(checkArgs.args) != 0 {
+		benchmarks = filterBencharmarksRule(benchmarks, checkArgs.args[0])
+	}
+	if len(benchmarks) == 0 {
+		log.Errorf("")
+		return fmt.Errorf("no benchmarks to run")
+	}
+
+	for _, benchmark := range benchmarks {
+		runner := compliance.NewRegoBenchmarkRunner(resolver, benchmark)
+		events := runner.RunBenchmarkGatherEvents(context.Background())
+		if checkArgs.dumpReports != "" {
+			if err := dumpComplianceEvents(checkArgs.dumpReports, events); err != nil {
+				log.Error(err)
+				return err
+			}
+		}
+		if checkArgs.report {
+			if err := reportComplianceEvents(log, config, events); err != nil {
+				log.Error(err)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func dumpComplianceEvents(reportFile string, events []*compliance.CheckEvent) error {
+	eventsMap := make(map[string][]*compliance.CheckEvent)
+	for _, event := range events {
+		eventsMap[event.RuleID] = append(eventsMap[event.RuleID], event)
+	}
+	b, err := json.MarshalIndent(eventsMap, "", "\t")
+	if err != nil {
+		return fmt.Errorf("could not marshal events map: %w", err)
+	}
+	if err := os.WriteFile(reportFile, b, 0644); err != nil {
+		return fmt.Errorf("could not write report file in %q: %w", reportFile, err)
+	}
+	return nil
+}
+
+func reportComplianceEvents(log log.Component, config config.Component, events []*compliance.CheckEvent) error {
 	stopper := startstop.NewSerialStopper()
 	defer stopper.Stop()
-
-	reporter, err := NewCheckReporter(log, config, stopper, checkArgs.report, checkArgs.dumpReports)
+	runPath := config.GetString("compliance_config.run_path")
+	endpoints, context, err := command.NewLogContextCompliance(log)
 	if err != nil {
-		return err
+		return fmt.Errorf("reporter: could not reate log context for compliance: %w", err)
 	}
-
-	if ruleID != "" {
-		log.Infof("Looking for rule with ID=%s", ruleID)
-		options = append(options, checks.WithMatchRule(checks.IsRuleID(ruleID)))
-	}
-
-	if checkArgs.framework != "" {
-		log.Infof("Looking for rules with framework=%s", checkArgs.framework)
-		options = append(options, checks.WithMatchSuite(checks.IsFramework(checkArgs.framework)))
-	}
-
-	if checkArgs.overrideRegoInput != "" {
-		log.Infof("Running on provided rego input: path=%s", checkArgs.overrideRegoInput)
-		options = append(options, checks.WithRegoInput(checkArgs.overrideRegoInput))
-	}
-
-	if checkArgs.dumpRegoInput != "" {
-		options = append(options, checks.WithRegoInputDumpPath(checkArgs.dumpRegoInput))
-	}
-
-	options = append(options, checks.WithRegoEvalSkip(checkArgs.skipRegoEval))
-
-	if checkArgs.file != "" {
-		err = agent.RunChecksFromFile(reporter, checkArgs.file, options...)
-	} else {
-		configDir := config.GetString("compliance_config.dir")
-		err = agent.RunChecks(reporter, configDir, options...)
-	}
-
+	reporter, err := compliance.NewLogReporter(stopper, "compliance-agent", "compliance", runPath, endpoints, context)
 	if err != nil {
-		log.Errorf("Failed to run checks: %v", err)
-		return err
+		return fmt.Errorf("reporter: could not create: %w", err)
 	}
-
-	if err := reporter.dumpReports(); err != nil {
-		log.Errorf("Failed to dump reports %v", err)
-		return err
+	for _, event := range events {
+		buf, err := json.Marshal(event)
+		if err != nil {
+			return fmt.Errorf("reporter: could not marshal event: %w", err)
+		}
+		reporter.ReportRaw(buf, "")
 	}
+	return nil
+}
 
+func complianceKubernetesProvider(_ctx context.Context) (dynamic.Interface, error) {
+	ctx, cancel := context.WithTimeout(_ctx, 2*time.Second)
+	defer cancel()
+	apiCl, err := apiserver.WaitForAPIClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return apiCl.DynamicCl, nil
+}
+
+func filterBencharmarksRule(benchmarks []*compliance.Benchmark, ruleID string) []*compliance.Benchmark {
+	var filteredBenchmarks []*compliance.Benchmark
+	for _, benchmark := range benchmarks {
+		var filteredRules []*compliance.Rule
+		for _, rule := range benchmark.Rules {
+			if rule.ID == ruleID {
+				filteredRules = append(filteredRules, rule)
+			}
+		}
+		if len(filteredRules) > 0 {
+			benchmark.Rules = filteredRules
+			filteredBenchmarks = append(filteredBenchmarks, benchmark)
+		}
+	}
+	return filteredBenchmarks
+}
+
+type fakeResolver struct {
+	output *compliance.ResolverOutcome
+}
+
+func (r *fakeResolver) ResolveInputs(ctx context.Context, rule *compliance.Rule) (*compliance.ResolverOutcome, error) {
+	return r.output, nil
+}
+
+func (r *fakeResolver) Close() error {
 	return nil
 }
