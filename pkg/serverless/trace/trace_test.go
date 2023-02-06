@@ -121,7 +121,7 @@ func TestFilterSpanFromLambdaLibraryOrRuntime(t *testing.T) {
 		},
 	}
 
-	dnsSpanFromLocaHhostAddress := pb.Span{
+	dnsSpanFromLocalhostAddress := pb.Span{
 		Meta: map[string]string{
 			"dns.address": "127.0.0.1",
 		},
@@ -145,7 +145,7 @@ func TestFilterSpanFromLambdaLibraryOrRuntime(t *testing.T) {
 	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&tcpSpanFromLambdaLibrary))
 	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&tcpSpanFromLambdaRuntime))
 	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&tcpSpanFromStatsD))
-	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&dnsSpanFromLocaHhostAddress))
+	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&dnsSpanFromLocalhostAddress))
 	assert.True(t, filterSpanFromLambdaLibraryOrRuntime(&dnsSpanFromNonRoutableAddress))
 	assert.False(t, filterSpanFromLambdaLibraryOrRuntime(&legitimateSpan))
 }
