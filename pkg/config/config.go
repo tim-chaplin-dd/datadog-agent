@@ -281,6 +281,7 @@ func InitConfig(config Config) {
 	config.BindEnvAndSetDefault("allow_arbitrary_tags", false)
 	config.BindEnvAndSetDefault("use_proxy_for_cloud_metadata", false)
 	config.BindEnvAndSetDefault("remote_tagger_timeout_seconds", 30)
+	config.BindEnvAndSetDefault("gogc_limit_pct", 0.7)
 
 	// Fips
 	config.BindEnvAndSetDefault("fips.enabled", false)

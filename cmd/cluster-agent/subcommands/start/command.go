@@ -43,6 +43,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/config/resolver"
 	commonsettings "github.com/DataDog/datadog-agent/pkg/config/settings"
 	"github.com/DataDog/datadog-agent/pkg/forwarder"
+	"github.com/DataDog/datadog-agent/pkg/runtime"
 	"github.com/DataDog/datadog-agent/pkg/status/health"
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util"
@@ -100,6 +101,9 @@ func start(log log.Component, config config.Component, cliParams *command.Global
 	// Starting Cluster Agent sequence
 	// Initialization order is important for multiple reasons, see comments
 
+	// Set memory limit
+	runtime.SetGoMemLimit(1, pkgconfig.IsContainerized())
+
 	if err := util.SetupCoreDump(config); err != nil {
 		pkglog.Warnf("Can't setup core dumps: %v, core dumps might not be available after a crash", err)
 	}
@@ -132,7 +136,7 @@ func start(log log.Component, config config.Component, cliParams *command.Global
 	}()
 
 	// Setup healthcheck port
-	var healthPort = pkgconfig.Datadog.GetInt("health_port")
+	healthPort := pkgconfig.Datadog.GetInt("health_port")
 	if healthPort > 0 {
 		err := healthprobe.Serve(mainCtx, healthPort)
 		if err != nil {

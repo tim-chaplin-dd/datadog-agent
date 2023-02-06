@@ -120,7 +120,8 @@ func Commands(globalParams *command.GlobalParams) []*cobra.Command {
 			fx.Supply(core.BundleParams{
 				ConfigParams:         config.NewAgentParamsWithSecrets(globalParams.ConfFilePath),
 				SysprobeConfigParams: sysprobeconfig.NewParams(sysprobeconfig.WithSysProbeConfFilePath(globalParams.SysProbeConfFilePath)),
-				LogParams:            log.LogForDaemon("CORE", "log_file", common.DefaultLogFile)}),
+				LogParams:            log.LogForDaemon("CORE", "log_file", common.DefaultLogFile),
+			}),
 			core.Bundle,
 		)
 	}
@@ -153,6 +154,8 @@ func run(log log.Component, config config.Component, flare flare.Component, sysp
 
 	// prepare go runtime
 	ddruntime.SetMaxProcs()
+	// set maximum memory limit
+	ddruntime.SetGoMemLimit(config.GetFloat64("gogc_limit_pct"), pkgconfig.IsContainerized())
 
 	// Setup a channel to catch OS signals
 	signalCh := make(chan os.Signal, 1)
@@ -206,7 +209,8 @@ func StartAgentWithDefaults() error {
 		// no config file path specification in this situation
 		fx.Supply(core.BundleParams{
 			ConfigParams: config.NewAgentParamsWithSecrets(""),
-			LogParams:    log.LogForDaemon("CORE", "log_file", common.DefaultLogFile)}),
+			LogParams:    log.LogForDaemon("CORE", "log_file", common.DefaultLogFile),
+		}),
 		core.Bundle,
 	)
 }

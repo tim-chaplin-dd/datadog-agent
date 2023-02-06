@@ -3,7 +3,7 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016-present Datadog, Inc.
 
-//go:build !linux || !go1.19
+//go:build !linux
 
 package runtime
 
@@ -13,5 +13,5 @@ import (
 
 // SetGoMemLimit configures Go memory limit based on cgroups. Only supported on Linux.
 func SetGoMemLimit(isContainerized bool) error {
-	return errors.New("unsupported")
+	return nil
 }

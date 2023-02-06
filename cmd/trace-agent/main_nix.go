@@ -24,7 +24,7 @@ func main() {
 
 	// prepare go runtime
 	runtime.SetMaxProcs()
-	if err := runtime.SetGoMemLimit(config.IsContainerized()); err != nil {
+	if err := runtime.SetGoMemLimit(0.9, config.IsContainerized()); err != nil {
 		log.Debugf("Couldn't set Go memory limit: %s", err)
 	}
 
