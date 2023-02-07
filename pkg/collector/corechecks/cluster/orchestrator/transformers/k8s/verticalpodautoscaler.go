@@ -9,10 +9,11 @@
 package k8s
 
 import (
-	model "github.com/DataDog/agent-payload/v5/process"
-	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/cluster/orchestrator/transformers"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
+
+	model "github.com/DataDog/agent-payload/v5/process"
+	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/cluster/orchestrator/transformers"
 )
 
 // ExtractVerticalPodAutoscaler returns the protobuf model corresponding to a Kubernetes Vertical Pod Autoscaler resource.
@@ -121,10 +122,10 @@ func extractVerticalPodAutoscalerStatus(s *v1.VerticalPodAutoscalerStatus) *mode
 
 // extractContainerRecommendations converts Kuberentes Recommendations to our protobuf model
 // https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1/types.go#L245
-func extractContainerRecommendations(cr []v1.RecommendedContainerResources) []*model.ContainerRecommendations {
-	recs := []*model.ContainerRecommendations{}
+func extractContainerRecommendations(cr []v1.RecommendedContainerResources) []*model.ContainerRecommendation {
+	recs := []*model.ContainerRecommendation{}
 	for _, r := range cr {
-		rec := model.ContainerRecommendations{
+		rec := model.ContainerRecommendation{
 			ContainerName:  r.ContainerName,
 			Target:         extractResourceList(&r.Target),
 			LowerBound:     extractResourceList(&r.LowerBound),
