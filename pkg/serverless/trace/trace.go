@@ -133,27 +133,27 @@ func (s *ServerlessTraceAgent) Stop() {
 func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 
 	// Filters out HTTP calls
-	if val, ok := span.Meta[httpURLMetaKey]; ok {
-		if strings.HasPrefix(val, lambdaExtensionURLPrefix) {
-			log.Debugf("Detected span with http url %s, removing it", val)
+	if httpURL, ok := span.Meta[httpURLMetaKey]; ok {
+		if strings.HasPrefix(httpURL, lambdaExtensionURLPrefix) {
+			log.Debugf("Detected span with http url %s, removing it", httpURL)
 			return true
 		}
 
-		if strings.HasPrefix(val, lambdaStatsDURLPrefix) {
-			log.Debugf("Detected span with http url %s, removing it", val)
+		if strings.HasPrefix(httpURL, lambdaStatsDURLPrefix) {
+			log.Debugf("Detected span with http url %s, removing it", httpURL)
 			return true
 		}
 
-		if strings.HasPrefix(val, lambdaRuntimeURLPrefix) {
-			log.Debugf("Detected span with http url %s, removing it", val)
+		if strings.HasPrefix(httpURL, lambdaRuntimeURLPrefix) {
+			log.Debugf("Detected span with http url %s, removing it", httpURL)
 			return true
 		}
 	}
 	
 	// Filers out TCP spans
-	if val, ok := span.Meta[tcpRemoteHostMetaKey]; ok {
-		if val1, ok := span.Meta[tcpRemotePortMetaKey]; ok {
-			tcpLambdaURLPrefix := fmt.Sprint("http://" + val + ":" + val1)
+	if tcpHost, ok := span.Meta[tcpRemoteHostMetaKey]; ok {
+		if tcpPort, ok := span.Meta[tcpRemotePortMetaKey]; ok {
+			tcpLambdaURLPrefix := fmt.Sprint("http://" + tcpHost + ":" + tcpPort)
 			if strings.HasPrefix(tcplambdaURLPrefix, lambdaExtensionURLPrefix) {
 				log.Debugf("Detected span with tcp url %s, removing it", tcplambdaURLPrefix)
 				return true
@@ -172,14 +172,14 @@ func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 	}
 
 	// Filers out DNS spans
-	if val, ok := span.Meta[dnsAddressMetaKey]; ok {
+	if dnsURL, ok := span.Meta[dnsAddressMetaKey]; ok {
 		if strings.HasPrefix(val, dnsNonRoutableAddressURLPrefix) {
-			log.Debugf("Detected span with dns url %s, removing it", val)
+			log.Debugf("Detected span with dns url %s, removing it", dnsURL)
 			return true
 		}
 
 		if strings.HasPrefix(val, dnsLocalHostAddressURLPrefix) {
-			log.Debugf("Detected span with dns url %s, removing it", val)
+			log.Debugf("Detected span with dns url %s, removing it", dnsURL)
 			return true
 		}
 
