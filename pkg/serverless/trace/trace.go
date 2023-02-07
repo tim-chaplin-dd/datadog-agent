@@ -172,17 +172,16 @@ func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 	}
 
 	// Filers out DNS spans
-	if dnsURL, ok := span.Meta[dnsAddressMetaKey]; ok {
-		if strings.HasPrefix(val, dnsNonRoutableAddressURLPrefix) {
-			log.Debugf("Detected span with dns url %s, removing it", dnsURL)
+	if dnsAddress, ok := span.Meta[dnsAddressMetaKey]; ok {
+		if strings.HasPrefix(dnsAddress, dnsNonRoutableAddressURLPrefix) {
+			log.Debugf("Detected span with dns url %s, removing it", dnsAddress)
 			return true
 		}
 
-		if strings.HasPrefix(val, dnsLocalHostAddressURLPrefix) {
-			log.Debugf("Detected span with dns url %s, removing it", dnsURL)
+		if strings.HasPrefix(dnsAddress, dnsLocalHostAddressURLPrefix) {
+			log.Debugf("Detected span with dns url %s, removing it", dnsAddress)
 			return true
 		}
-
 	}
 
 	if span != nil && span.Resource == invocationSpanResource {
