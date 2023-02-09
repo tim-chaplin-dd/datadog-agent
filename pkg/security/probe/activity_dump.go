@@ -1017,14 +1017,12 @@ type ProcessActivityNode struct {
 // NewProcessActivityNode returns a new ProcessActivityNode instance
 func NewProcessActivityNode(entry *model.ProcessCacheEntry, generationType NodeGenerationType, nodeStats *ActivityDumpNodeStats) *ProcessActivityNode {
 	nodeStats.processNodes++
-	pan := ProcessActivityNode{
+	return &ProcessActivityNode{
 		Process:        entry.Process,
 		GenerationType: generationType,
 		Files:          make(map[string]*FileActivityNode),
 		DNSNames:       make(map[string]*DNSNode),
 	}
-	pan.retain()
-	return &pan
 }
 
 // nolint: unused
@@ -1052,15 +1050,6 @@ func (pan *ProcessActivityNode) debug(w io.Writer, prefix string) {
 	}
 }
 
-func (pan *ProcessActivityNode) retain() {
-	if pan.Process.ArgsEntry != nil {
-		pan.Process.ArgsEntry.Retain()
-	}
-	if pan.Process.EnvsEntry != nil {
-		pan.Process.EnvsEntry.Retain()
-	}
-}
-
 // scrubAndReleaseArgsEnvs scrubs the process args and envs, and then releases them
 func (pan *ProcessActivityNode) scrubAndReleaseArgsEnvs(resolver *ProcessResolver) {
 	_, _ = resolver.GetProcessScrubbedArgv(&pan.Process)
@@ -1069,12 +1058,6 @@ func (pan *ProcessActivityNode) scrubAndReleaseArgsEnvs(resolver *ProcessResolve
 	pan.Process.EnvsTruncated = envsTruncated
 	pan.Process.Argv0, _ = resolver.GetProcessArgv0(&pan.Process)
 
-	if pan.Process.ArgsEntry != nil {
-		pan.Process.ArgsEntry.Release()
-	}
-	if pan.Process.EnvsEntry != nil {
-		pan.Process.EnvsEntry.Release()
-	}
 	pan.Process.ArgsEntry = nil
 	pan.Process.EnvsEntry = nil
 }
