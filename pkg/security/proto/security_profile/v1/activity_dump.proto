@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "pkg/security/adproto/v1";
+option go_package = "pkg/security/proto/security_profile/v1";
 
 package adproto;
 
@@ -31,6 +31,14 @@ message Metadata {
     uint64 end = 11;
     uint64 size = 12;
     string serialization = 14;
+}
+
+message SecurityProfile {
+    string status = 1;
+    string content_version = 2;
+    Metadata metadata = 3;
+    repeated string tags = 4;
+    repeated ProcessActivityNode tree = 5;
 }
 
 message ProcessActivityNode {
