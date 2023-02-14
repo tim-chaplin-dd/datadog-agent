@@ -102,8 +102,8 @@ type Config struct {
 	// JavaAgentArgs arguments pass through injected USM agent
 	JavaAgentArgs string
 
-	// JavaAgentAllowList (Higher priority) define a regex, if matching /proc/pid/cmdline the java agent will be injected
-	JavaAgentAllowList string
+	// JavaAgentAllowRegex (Higher priority) define a regex, if matching /proc/pid/cmdline the java agent will be injected
+	JavaAgentAllowRegex string
 
 	// JavaAgentBlockList define a regex, if matching /proc/pid/cmdline the java agent will not be injected
 	JavaAgentBlockList string
@@ -300,6 +300,8 @@ func New() *Config {
 		// Service Monitoring
 		EnableJavaTLSSupport: cfg.GetBool(join(smNS, "enable_java_tls_support")),
 		JavaAgentArgs:        cfg.GetString(join(smNS, "java_agent_args")),
+		JavaAgentAllowRegex:  cfg.GetString(join(smNS, "java_agent_allow_regex")),
+		JavaAgentBlockList:   cfg.GetString(join(smNS, "java_agent_block_regex")),
 		EnableGoTLSSupport:   cfg.GetBool(join(smNS, "enable_go_tls_support")),
 	}
 

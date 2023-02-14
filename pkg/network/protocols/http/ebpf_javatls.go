@@ -43,8 +43,8 @@ var (
 
 	// The regex is matching against /proc/pid/cmdline
 	// if matching the agent-usm.jar would or not injected
-	javaAgentAllowListRegex *regexp.Regexp
-	javaAgentBlockListRegex *regexp.Regexp
+	javaAgentAllowRegex *regexp.Regexp
+	javaAgentBlockRegex *regexp.Regexp
 )
 
 type JavaTLSProgram struct {
@@ -63,17 +63,17 @@ func newJavaTLSProgram(c *config.Config) *JavaTLSProgram {
 	}
 
 	javaUSMAgentArgs = c.JavaAgentArgs
-	if c.JavaAgentAllowList != "" {
-		javaAgentAllowListRegex, err = regexp.Compile(c.JavaAgentAllowList)
+	if c.JavaAgentAllowRegex != "" {
+		javaAgentAllowRegex, err = regexp.Compile(c.JavaAgentAllowRegex)
 		if err != nil {
-			javaAgentAllowListRegex = nil
-			log.Errorf("JavaAgentAllowList regex can't be compiled %s", err)
+			javaAgentAllowRegex = nil
+			log.Errorf("JavaAgentAllowRegex regex can't be compiled %s", err)
 		}
 	}
 	if c.JavaAgentBlockList != "" {
-		javaAgentBlockListRegex, err = regexp.Compile(c.JavaAgentBlockList)
+		javaAgentBlockRegex, err = regexp.Compile(c.JavaAgentBlockList)
 		if err != nil {
-			javaAgentBlockListRegex = nil
+			javaAgentBlockRegex = nil
 			log.Errorf("JavaAgentBlockList regex can't be compiled %s", err)
 		}
 	}
@@ -105,7 +105,7 @@ func (p *JavaTLSProgram) GetAllUndefinedProbes() (probeList []manager.ProbeIdent
 
 func allowBlockAttachment(pid uint32) (reject bool) {
 	// filter is disabled (default configuration)
-	if javaAgentAllowListRegex == nil && javaAgentBlockListRegex == nil {
+	if javaAgentAllowRegex == nil && javaAgentBlockRegex == nil {
 		return false
 	}
 
@@ -118,10 +118,10 @@ func allowBlockAttachment(pid uint32) (reject bool) {
 	fullCmdline := strings.ReplaceAll(string(cmd), "\000", " ")
 
 	// Allow have an higher priority
-	if javaAgentAllowListRegex != nil && javaAgentAllowListRegex.MatchString(fullCmdline) {
+	if javaAgentAllowRegex != nil && javaAgentAllowRegex.MatchString(fullCmdline) {
 		return false
 	}
-	if javaAgentBlockListRegex != nil && javaAgentBlockListRegex.MatchString(fullCmdline) {
+	if javaAgentBlockRegex != nil && javaAgentBlockRegex.MatchString(fullCmdline) {
 		return true
 	}
 	// by default we attach the java process

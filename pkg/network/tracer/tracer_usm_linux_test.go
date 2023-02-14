@@ -632,7 +632,7 @@ func TestJavaInjection(t *testing.T) {
 
 				// testing allow/block list, as Allow list have higher priority
 				// this test will pass normally
-				cfg.JavaAgentAllowList = ".*JustWait.*"
+				cfg.JavaAgentAllowRegex = ".*JustWait.*"
 				cfg.JavaAgentBlockList = ".*"
 			},
 			postTracerSetup: func(t *testing.T, ctx testContext) {
