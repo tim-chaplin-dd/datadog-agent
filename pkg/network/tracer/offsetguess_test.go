@@ -12,15 +12,23 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cihub/seelog"
 	"github.com/cilium/ebpf/btf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/DataDog/datadog-agent/pkg/ebpf"
 	netebpf "github.com/DataDog/datadog-agent/pkg/network/ebpf"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 func TestOffsetGuessAgainstBTF(t *testing.T) {
+	lvl, _ := log.GetLogLevel()
+	log.ChangeLogLevel(seelog.Default, "trace")
+	t.Cleanup(func() {
+		log.ChangeLogLevel(seelog.Default, lvl.String())
+	})
+
 	cfg := testConfig()
 	offsetBuf, err := netebpf.ReadOffsetBPFModule(cfg.BPFDir, cfg.BPFDebug)
 	require.NoError(t, err)
