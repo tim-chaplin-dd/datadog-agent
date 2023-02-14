@@ -430,6 +430,16 @@ func (m *SecurityConfigMessage) MarshalToSizedBufferVT(dAtA []byte) (int, error)
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.ActivityDumpEnabled {
+		i--
+		if m.ActivityDumpEnabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x18
+	}
 	if m.FIMEnabled {
 		i--
 		if m.FIMEnabled {
@@ -1974,6 +1984,9 @@ func (m *SecurityConfigMessage) SizeVT() (n int) {
 	if m.FIMEnabled {
 		n += 2
 	}
+	if m.ActivityDumpEnabled {
+		n += 2
+	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
 	}
@@ -3413,6 +3426,26 @@ func (m *SecurityConfigMessage) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.FIMEnabled = bool(v != 0)
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ActivityDumpEnabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ActivityDumpEnabled = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])
