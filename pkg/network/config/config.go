@@ -102,6 +102,12 @@ type Config struct {
 	// JavaAgentArgs arguments pass through injected USM agent
 	JavaAgentArgs string
 
+	// JavaAgentAllowList (Higher priority) define a regex, if matching /proc/pid/cmdline the java agent will be injected
+	JavaAgentAllowList string
+
+	// JavaAgentBlockList define a regex, if matching /proc/pid/cmdline the java agent will not be injected
+	JavaAgentBlockList string
+
 	// UDPConnTimeout determines the length of traffic inactivity between two
 	// (IP, port)-pairs before declaring a UDP connection as inactive. This is
 	// set to /proc/sys/net/netfilter/nf_conntrack_udp_timeout on Linux by
