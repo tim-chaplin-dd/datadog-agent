@@ -19,6 +19,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/ebpf"
 	netebpf "github.com/DataDog/datadog-agent/pkg/network/ebpf"
+	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/kprobe"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
@@ -34,61 +35,37 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 	require.NoError(t, err)
 	defer offsetBuf.Close()
 
+	protocolClassificationSupported := kprobe.ClassificationSupported(cfg)
+
 	constantEditors, err := runOffsetGuessing(cfg, offsetBuf)
 	require.NoError(t, err)
 
 	btfdata, _ := ebpf.GetBTF(cfg.BTFPath, cfg.BPFDir)
 	require.NotNil(t, btfdata)
 
-	var sk *btf.Struct
-	err = btfdata.TypeByName("sock", &sk)
-	require.NoError(t, err)
+	sock := getFirstStruct(t, btfdata, "sock")
+	inet_sock := getFirstStruct(t, btfdata, "inet_sock")
+	sock_common := getFirstStruct(t, btfdata, "sock_common")
+	net := getFirstStruct(t, btfdata, "net")
+	tcp_sock := getFirstStruct(t, btfdata, "tcp_sock")
+	flowi4 := getFirstStruct(t, btfdata, "flowi4")
+	flowi_uli := getFirstUnion(t, btfdata, "flowi_uli")
+	flowi6 := getFirstStruct(t, btfdata, "flowi6")
+	sk_buff := getFirstStruct(t, btfdata, "sk_buff")
 
-	var inet_sock *btf.Struct
-	err = btfdata.TypeByName("inet_sock", &inet_sock)
-	require.NoError(t, err)
-
-	var sk_common *btf.Struct
-	err = btfdata.TypeByName("sock_common", &sk_common)
-	require.NoError(t, err)
-
-	var net *btf.Struct
-	err = btfdata.TypeByName("net", &net)
-	require.NoError(t, err)
-
-	var tcp_sock *btf.Struct
-	err = btfdata.TypeByName("tcp_sock", &tcp_sock)
-	require.NoError(t, err)
-
-	var flowi4 *btf.Struct
-	err = btfdata.TypeByName("flowi4", &flowi4)
-	require.NoError(t, err)
-
-	var flowi_uli *btf.Union
-	err = btfdata.TypeByName("flowi_uli", &flowi_uli)
-	require.NoError(t, err)
-
-	var flowi6 *btf.Struct
-	err = btfdata.TypeByName("flowi6", &flowi6)
-	require.NoError(t, err)
-
-	var sk_buff *btf.Struct
-	err = btfdata.TypeByName("sk_buff", &sk_buff)
-	require.NoError(t, err)
-
-	sk_common_offset, _, err := getOffset(sk.Members, "__sk_common")
+	sk_common_offset, _, err := getOffset(sock.Members, "__sk_common")
 	require.NoError(t, err)
 
 	for _, ce := range constantEditors {
 		t.Run(ce.Name, func(t *testing.T) {
 			switch ce.Name {
 			case "offset_saddr":
-				off, _, err := getOffset(sk_common.Members, "skc_rcv_saddr")
+				off, _, err := getOffset(sock_common.Members, "skc_rcv_saddr")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_daddr":
-				off, _, err := getOffset(sk_common.Members, "skc_daddr")
+				off, _, err := getOffset(sock_common.Members, "skc_daddr")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
@@ -99,22 +76,22 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 					assert.Equal(t, uint64(off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_dport":
-				off, _, err := getOffset(sk_common.Members, "skc_dport")
+				off, _, err := getOffset(sock_common.Members, "skc_dport")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_netns":
-				off, _, err := getOffset(sk_common.Members, "skc_net")
+				off, _, err := getOffset(sock_common.Members, "skc_net")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_family":
-				off, _, err := getOffset(sk_common.Members, "skc_family")
+				off, _, err := getOffset(sock_common.Members, "skc_family")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_daddr_ipv6":
-				off, _, err := getOffset(sk_common.Members, "skc_v6_daddr")
+				off, _, err := getOffset(sock_common.Members, "skc_v6_daddr")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(sk_common_offset+off), ce.Value.(uint64), ce.Name)
 				}
@@ -198,8 +175,7 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 					}
 				}
 			case "offset_socket_sk":
-				var socket *btf.Struct
-				err = btfdata.TypeByName("socket", &socket)
+				socket := getFirstStruct(t, btfdata, "socket")
 				if assert.NoError(t, err) {
 					off, _, err := getOffset(socket.Members, "sk")
 					if assert.NoError(t, err, ce.Name) {
@@ -207,16 +183,25 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 					}
 				}
 			case "offset_sk_buff_sock":
+				if !protocolClassificationSupported {
+					t.SkipNow()
+				}
 				off, _, err := getOffset(sk_buff.Members, "sk")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_sk_buff_transport_header":
+				if !protocolClassificationSupported {
+					t.SkipNow()
+				}
 				off, _, err := getOffset(sk_buff.Members, "transport_header")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(off), ce.Value.(uint64), ce.Name)
 				}
 			case "offset_sk_buff_head":
+				if !protocolClassificationSupported {
+					t.SkipNow()
+				}
 				off, _, err := getOffset(sk_buff.Members, "head")
 				if assert.NoError(t, err, ce.Name) {
 					assert.Equal(t, uint64(off), ce.Value.(uint64), ce.Name)
@@ -226,6 +211,36 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 			}
 		})
 	}
+}
+
+func getFirstStruct(t testing.TB, btfdata *btf.Spec, name string) *btf.Struct {
+	types, err := btfdata.AnyTypesByName(name)
+	if err != nil {
+		t.Fatalf("unable to find BTF type %s: %s", name, err)
+	}
+	for _, ty := range types {
+		switch v := ty.(type) {
+		case *btf.Struct:
+			return v
+		}
+	}
+	t.Fatalf("no matching structs named %s", name)
+	return nil
+}
+
+func getFirstUnion(t testing.TB, btfdata *btf.Spec, name string) *btf.Union {
+	types, err := btfdata.AnyTypesByName(name)
+	if err != nil {
+		t.Fatalf("unable to find BTF type %s: %s", name, err)
+	}
+	for _, ty := range types {
+		switch v := ty.(type) {
+		case *btf.Union:
+			return v
+		}
+	}
+	t.Fatalf("no matching unions named %s", name)
+	return nil
 }
 
 func getOffset(members []btf.Member, name string) (uint32, btf.Member, error) {
