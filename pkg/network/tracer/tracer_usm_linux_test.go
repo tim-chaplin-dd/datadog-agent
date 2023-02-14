@@ -629,6 +629,11 @@ func TestJavaInjection(t *testing.T) {
 				os.Remove(tfile.Name())
 				ctx.extras["testfile"] = tfile.Name()
 				cfg.JavaAgentArgs += " testfile=/v/" + filepath.Base(tfile.Name())
+
+				// testing allow/block list, as Allow list have higher priority
+				// this test will pass normally
+				cfg.JavaAgentAllowList = ".*JustWait.*"
+				cfg.JavaAgentBlockList = ".*"
 			},
 			postTracerSetup: func(t *testing.T, ctx testContext) {
 				javatestutil.RunJavaVersion(t, "openjdk:21-oraclelinux8", "JustWait")
@@ -642,6 +647,38 @@ func TestJavaInjection(t *testing.T) {
 				testfile := ctx.extras["testfile"].(string)
 				_, err := os.Stat(testfile)
 				require.NoError(t, err)
+				os.Remove(testfile)
+			},
+			// Test the java hotspot injection is working
+			name: "java_hotspot_injection_block_JustWait",
+			context: testContext{
+				extras: make(map[string]interface{}),
+			},
+			preTracerSetup: func(t *testing.T, ctx testContext) {
+				ctx.extras["JavaAgentArgs"] = cfg.JavaAgentArgs
+
+				tfile, err := ioutil.TempFile(dir+"/../java/testdata/", "TestAgentLoaded.agentmain.*")
+				require.NoError(t, err)
+				tfile.Close()
+				os.Remove(tfile.Name())
+				ctx.extras["testfile"] = tfile.Name()
+				cfg.JavaAgentArgs += " testfile=/v/" + filepath.Base(tfile.Name())
+
+				// block the agent attachment
+				cfg.JavaAgentBlockList = ".*JustWait.*"
+			},
+			postTracerSetup: func(t *testing.T, ctx testContext) {
+				javatestutil.RunJavaVersion(t, "openjdk:21-oraclelinux8", "JustWait")
+				// if RunJavaVersion failing to start it's probably because the java process has not been injected
+
+				cfg.JavaAgentArgs = ctx.extras["JavaAgentArgs"].(string)
+			},
+			validation: func(t *testing.T, ctx testContext, tr *Tracer) {
+				time.Sleep(time.Second)
+
+				testfile := ctx.extras["testfile"].(string)
+				_, err := os.Stat(testfile)
+				require.Error(t, err) // we require error here as we block the attachment
 				os.Remove(testfile)
 			},
 		},
