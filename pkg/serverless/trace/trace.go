@@ -154,7 +154,7 @@ func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 		}
 	}
 	
-	// Filers out TCP spans
+	// Filters out TCP spans
 	if tcpHost, ok := span.Meta[tcpRemoteHostMetaKey]; ok {
 		if tcpPort, ok := span.Meta[tcpRemotePortMetaKey]; ok {
 			tcpLambdaURLPrefix := fmt.Sprint("http://" + tcpHost + ":" + tcpPort)
@@ -175,7 +175,7 @@ func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 		}
 	}
 
-	// Filers out DNS spans
+	// Filters out DNS spans
 	if dnsAddress, ok := span.Meta[dnsAddressMetaKey]; ok {
 		if strings.HasPrefix(dnsAddress, dnsNonRoutableAddressURLPrefix) {
 			log.Debugf("Detected span with dns url %s, removing it", dnsAddress)
