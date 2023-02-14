@@ -158,17 +158,17 @@ func filterSpanFromLambdaLibraryOrRuntime(span *pb.Span) bool {
 	if tcpHost, ok := span.Meta[tcpRemoteHostMetaKey]; ok {
 		if tcpPort, ok := span.Meta[tcpRemotePortMetaKey]; ok {
 			tcpLambdaURLPrefix := fmt.Sprint("http://" + tcpHost + ":" + tcpPort)
-			if strings.HasPrefix(tcplambdaURLPrefix, lambdaExtensionURLPrefix) {
+			if strings.HasPrefix(tcpLambdaURLPrefix, lambdaExtensionURLPrefix) {
 				log.Debugf("Detected span with tcp url %s, removing it", tcplambdaURLPrefix)
 				return true
 			}
 
-			if strings.HasPrefix(tcplambdaURLPrefix, lambdaStatsDURLPrefix) {
+			if strings.HasPrefix(tcpLambdaURLPrefix, lambdaStatsDURLPrefix) {
 				log.Debugf("Detected span with tcp url %s, removing it", tcplambdaURLPrefix)
 				return true
 			}
 
-			if strings.HasPrefix(tcplambdaURLPrefix, lambdaRuntimeURLPrefix) {
+			if strings.HasPrefix(tcpLambdaURLPrefix, lambdaRuntimeURLPrefix) {
 				log.Debugf("Detected span with tcp url %s, removing it", tcplambdaURLPrefix)
 				return true
 			}
