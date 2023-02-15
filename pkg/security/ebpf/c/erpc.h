@@ -171,8 +171,10 @@ int __attribute__((always_inline)) handle_erpc_request(struct pt_regs *ctx) {
             return handle_expire_pid_discarder(data);
         case BUMP_DISCARDERS_REVISION:
             return handle_bump_discarders_revision(data);
+#if USE_RING_BUFFER == 1
         case GET_RINGBUF_USAGE:
             return handle_get_ringbuf_usage(data);
+#endif
     }
 
     return 0;
