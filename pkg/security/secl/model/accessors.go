@@ -568,6 +568,15 @@ func (m *Model) GetEvaluator(field eval.Field, regID eval.RegisterID) (eval.Eval
 			Field:  field,
 			Weight: eval.FunctionWeight,
 		}, nil
+	case "container.created_at":
+		return &eval.IntEvaluator{
+			EvalFnc: func(ctx *eval.Context) int {
+				ev := ctx.Event.(*Event)
+				return int(ev.FieldHandlers.ResolveContainerCreatedAt(ev, &ev.ContainerContext))
+			},
+			Field:  field,
+			Weight: eval.HandlerWeight,
+		}, nil
 	case "container.id":
 		return &eval.StringEvaluator{
 			EvalFnc: func(ctx *eval.Context) string {
@@ -13789,6 +13798,7 @@ func (ev *Event) GetFields() []eval.Field {
 		"chown.file.uid",
 		"chown.file.user",
 		"chown.retval",
+		"container.created_at",
 		"container.id",
 		"container.tags",
 		"dns.id",
@@ -14925,6 +14935,8 @@ func (ev *Event) GetFieldValue(field eval.Field) (interface{}, error) {
 		return ev.FieldHandlers.ResolveFileFieldsUser(ev, &ev.Chown.File.FileFields), nil
 	case "chown.retval":
 		return int(ev.Chown.SyscallEvent.Retval), nil
+	case "container.created_at":
+		return int(ev.FieldHandlers.ResolveContainerCreatedAt(ev, &ev.ContainerContext)), nil
 	case "container.id":
 		return ev.FieldHandlers.ResolveContainerID(ev, &ev.ContainerContext), nil
 	case "container.tags":
@@ -19024,6 +19036,8 @@ func (ev *Event) GetFieldEventType(field eval.Field) (eval.EventType, error) {
 		return "chown", nil
 	case "chown.retval":
 		return "chown", nil
+	case "container.created_at":
+		return "*", nil
 	case "container.id":
 		return "*", nil
 	case "container.tags":
@@ -21172,6 +21186,8 @@ func (ev *Event) GetFieldType(field eval.Field) (reflect.Kind, error) {
 	case "chown.file.user":
 		return reflect.String, nil
 	case "chown.retval":
+		return reflect.Int, nil
+	case "container.created_at":
 		return reflect.Int, nil
 	case "container.id":
 		return reflect.String, nil
@@ -23586,6 +23602,13 @@ func (ev *Event) SetFieldValue(field eval.Field, value interface{}) error {
 			return &eval.ErrValueTypeMismatch{Field: "Chown.SyscallEvent.Retval"}
 		}
 		ev.Chown.SyscallEvent.Retval = int64(rv)
+		return nil
+	case "container.created_at":
+		rv, ok := value.(int)
+		if !ok {
+			return &eval.ErrValueTypeMismatch{Field: "ContainerContext.CreatedAt"}
+		}
+		ev.ContainerContext.CreatedAt = uint64(rv)
 		return nil
 	case "container.id":
 		rv, ok := value.(string)
