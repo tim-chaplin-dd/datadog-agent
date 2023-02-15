@@ -4166,6 +4166,18 @@ func easyjsonA970e379DecodeGithubComDataDogDatadogAgentPkgSecurityProbe30(in *jl
 		switch key {
 		case "id":
 			out.ID = string(in.String())
+		case "created_at":
+			if in.IsNull() {
+				in.Skip()
+				out.CreatedAt = nil
+			} else {
+				if out.CreatedAt == nil {
+					out.CreatedAt = new(utils.EasyjsonTime)
+				}
+				if data := in.Raw(); in.Ok() {
+					in.AddError((*out.CreatedAt).UnmarshalJSON(data))
+				}
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -4185,6 +4197,16 @@ func easyjsonA970e379EncodeGithubComDataDogDatadogAgentPkgSecurityProbe30(out *j
 		first = false
 		out.RawString(prefix[1:])
 		out.String(string(in.ID))
+	}
+	if in.CreatedAt != nil {
+		const prefix string = ",\"created_at\":"
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
+		(*in.CreatedAt).MarshalEasyJSON(out)
 	}
 	out.RawByte('}')
 }
