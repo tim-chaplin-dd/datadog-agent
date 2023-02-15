@@ -60,7 +60,7 @@ func ExtractPod(p *corev1.Pod) *model.Pod {
 
 	if len(p.Status.Conditions) > 0 {
 		podConditions, conditionTags := extractPodConditions(p)
-		podModel.PodConditions = podConditions
+		podModel.Conditions = podConditions
 		podModel.Tags = append(podModel.Tags, conditionTags...)
 	}
 

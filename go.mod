@@ -594,4 +594,4 @@ replace (
 	sigs.k8s.io/custom-metrics-apiserver => sigs.k8s.io/custom-metrics-apiserver v1.23.0
 )
 
-replace github.com/DataDog/agent-payload/v5 => github.com/DataDog/agent-payload/v5 v5.0.71-0.20230207105229-42815a2fe8a0
+replace github.com/DataDog/agent-payload/v5 => github.com/DataDog/agent-payload/v5 v5.0.72-0.20230215131723-4cf88e1e8702

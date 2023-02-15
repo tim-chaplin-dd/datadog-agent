@@ -207,7 +207,7 @@ func TestExtractPod(t *testing.T) {
 						ContainerID:  "docker://bazID",
 					},
 				},
-				PodConditions: []*model.PodCondition{
+				Conditions: []*model.PodCondition{
 					{
 						Type:   "Ready",
 						Status: "True",
@@ -293,7 +293,7 @@ func TestExtractPod(t *testing.T) {
 						Name: "bazName",
 					},
 				},
-				PodConditions: []*model.PodCondition{
+				Conditions: []*model.PodCondition{
 					{
 						Type:   "Ready",
 						Status: "True",
@@ -391,7 +391,7 @@ func TestExtractPod(t *testing.T) {
 						Name: "bazName",
 					},
 				},
-				PodConditions: []*model.PodCondition{
+				Conditions: []*model.PodCondition{
 					{
 						Type:   "Ready",
 						Status: "True",
@@ -474,7 +474,7 @@ func TestExtractPod(t *testing.T) {
 						Type:     model.ResourceRequirementsType_container,
 					},
 				},
-				PodConditions: []*model.PodCondition{
+				Conditions: []*model.PodCondition{
 					{
 						Type:   "Ready",
 						Status: "True",
