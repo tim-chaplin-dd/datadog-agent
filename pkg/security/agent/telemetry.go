@@ -119,8 +119,10 @@ func (t *telemetry) reportProfiledContainers() error {
 		profiled[entry] = false
 	}
 
+	debugActually := make([]string, 0)
 	for containerEntry := range t.profiledContainers {
 		profiled[containerEntry] = true
+		debugActually = append(debugActually, fmt.Sprintf("%s:%s", containerEntry.name, containerEntry.tag))
 	}
 
 	missing := make([]string, 0, len(profiled))
@@ -131,7 +133,7 @@ func (t *telemetry) reportProfiledContainers() error {
 	}
 
 	if len(missing) > 0 {
-		log.Infof("not yet profiled workloads (%d/%d): %v", len(missing), len(profiled), missing)
+		log.Infof("not yet profiled workloads (%d/%d): %v; actually profiled: %v", len(missing), len(profiled), missing)
 	}
 	t.containers.Sender.Gauge(metrics.MetricActivityDumpNotYetProfiledWorkload, float64(len(missing)), "", nil)
 	return nil
