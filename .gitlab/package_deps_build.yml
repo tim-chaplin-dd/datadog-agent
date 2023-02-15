@@ -9,7 +9,8 @@
   script:
     - cd $CI_PROJECT_DIR
     - $S3_CP_CMD $S3_PERMANENT_ARTIFACTS_URI/btfs-$ARCH.tar.xz .
-    - tar -xf btfs-$ARCH.tar.xz
+    - mkdir btfs-$ARCH
+    - tar -xf btfs-$ARCH.tar.xz -C btfs-$ARCH
     - $S3_CP_CMD $S3_ARTIFACTS_URI/oom-kill-co-re.o.$ARCH oom-kill.o
     - $S3_CP_CMD $S3_ARTIFACTS_URI/tcp-queue-length-co-re.o.$ARCH tcp-queue-length.o
     - $S3_CP_CMD $S3_ARTIFACTS_URI/tracer-fentry-co-re.o.$ARCH tracer-fentry.o

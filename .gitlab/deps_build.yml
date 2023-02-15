@@ -176,9 +176,13 @@ build_processed_btfhub_archive:
     - mv btfs-amd64/rhel btfs-amd64/redhat
     - mv btfs-arm64/rhel btfs-arm64/redhat
     # Store results in S3
-    - tar -cJf btfs-arm64.tar.xz btfs-arm64
-    - tar -cJf btfs-amd64.tar.xz btfs-amd64
+    - pushd btfs-arm64
+    - tar -cJf btfs-arm64.tar.xz *
     - $S3_CP_CMD btfs-arm64.tar.xz $S3_PERMANENT_ARTIFACTS_URI/btfs-arm64.tar.xz
+    - $S3_CP_CMD $S3_PERMANENT_ARTIFACTS_URI/btfs-arm64.tar.xz $S3_DD_AGENT_OMNIBUS_BTFS_URI/btfs-arm64.tar.xz --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+    - popd
+    - pushd btfs-amd64
+    - tar -cJf btfs-amd64.tar.xz *
     - $S3_CP_CMD btfs-amd64.tar.xz $S3_PERMANENT_ARTIFACTS_URI/btfs-amd64.tar.xz
-    - $S3_CP_CMD btfs-arm64.tar.xz $S3_DD_AGENT_OMNIBUS_BTFS_URI/btfs-arm64.tar.xz --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
-    - $S3_CP_CMD btfs-amd64.tar.xz $S3_DD_AGENT_OMNIBUS_BTFS_URI/btfs-amd64.tar.xz --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+    - $S3_CP_CMD $S3_PERMANENT_ARTIFACTS_URI/btfs-amd64.tar.xz $S3_DD_AGENT_OMNIBUS_BTFS_URI/btfs-amd64.tar.xz --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+    - popd
