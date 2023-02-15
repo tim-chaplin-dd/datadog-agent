@@ -135,6 +135,10 @@ directory "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf" do
   recursive true
 end
 
+directory "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/full-btf" do
+  recursive true
+end
+
 cookbook_file "/opt/datadog-agent/embedded/bin/clang-bpf" do
   source "clang-bpf"
   mode '0744'
@@ -152,7 +156,7 @@ cookbook_file "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf/minimiz
   action :create
 end
 
-cookbook_file "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf/btfs.tar.xz" do
+cookbook_file "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/full-btf/btfs.tar.xz" do
   source "btfs.tar.xz"
   action :create
 end

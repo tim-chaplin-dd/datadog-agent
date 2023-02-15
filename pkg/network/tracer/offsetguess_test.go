@@ -40,7 +40,7 @@ func TestOffsetGuessAgainstBTF(t *testing.T) {
 	constantEditors, err := runOffsetGuessing(cfg, offsetBuf)
 	require.NoError(t, err)
 
-	btfdata, _ := ebpf.GetBTF(cfg.BTFPath, cfg.BPFDir, "co-re/btf/btfs.tar.xz")
+	btfdata, _ := ebpf.GetBTF(cfg.BTFPath, cfg.BPFDir, "co-re/full-btf/btfs.tar.xz")
 	require.NotNil(t, btfdata)
 
 	sock := getFirstStruct(t, btfdata, "sock")
