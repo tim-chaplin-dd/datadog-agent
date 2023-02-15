@@ -66,7 +66,7 @@ int tracepoint__net__netif_receive_skb(struct pt_regs* ctx) {
     log_debug("tracepoint/net/netif_receive_skb\n");
     // flush batch to userspace
     // because perf events can't be sent from socket filter programs
-    http_flush_batch(ctx);
+    http_batch_flush(ctx);
     return 0;
 }
 
