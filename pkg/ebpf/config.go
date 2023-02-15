@@ -42,6 +42,9 @@ type Config struct {
 	// BTFPath is the path to BTF data for the current kernel
 	BTFPath string
 
+	// BTFCollectionPath is the relative path from BPFDir to the packaged tarball containing BTF files
+	BTFCollectionPath string
+
 	// EnableRuntimeCompiler enables the use of the embedded compiler to build eBPF programs on-host
 	EnableRuntimeCompiler bool
 
@@ -91,8 +94,9 @@ func NewConfig() *Config {
 		EnableTracepoints:        cfg.GetBool(key(spNS, "enable_tracepoints")),
 		ProcRoot:                 util.GetProcRoot(),
 
-		EnableCORE: cfg.GetBool(key(spNS, "enable_co_re")),
-		BTFPath:    cfg.GetString(key(spNS, "btf_path")),
+		EnableCORE:        cfg.GetBool(key(spNS, "enable_co_re")),
+		BTFPath:           cfg.GetString(key(spNS, "btf_path")),
+		BTFCollectionPath: cfg.GetString(key(spNS, "btf_collection_path")),
 
 		EnableRuntimeCompiler:        cfg.GetBool(key(spNS, "enable_runtime_compiler")),
 		RuntimeCompilerOutputDir:     cfg.GetString(key(spNS, "runtime_compiler_output_dir")),

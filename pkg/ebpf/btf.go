@@ -22,7 +22,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
-func GetBTF(userProvidedBtfPath, bpfDir string) (*btf.Spec, COREResult) {
+func GetBTF(userProvidedBtfPath string, bpfDir string, collectionFilePath string) (*btf.Spec, COREResult) {
 	var btfSpec *btf.Spec
 	var err error
 
@@ -34,7 +34,7 @@ func GetBTF(userProvidedBtfPath, bpfDir string) (*btf.Spec, COREResult) {
 		}
 	}
 
-	btfSpec, err = checkEmbeddedCollection(filepath.Join(bpfDir, "co-re/btf/"))
+	btfSpec, err = checkEmbeddedCollection(filepath.Join(bpfDir, collectionFilePath))
 	if err == nil {
 		log.Debugf("loaded BTF from embedded collection")
 		return btfSpec, successEmbeddedBTF
@@ -81,7 +81,8 @@ func getBTFDirAndFilename() (dir, file string, err error) {
 	}
 }
 
-func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
+func checkEmbeddedCollection(collectionFilePath string) (*btf.Spec, error) {
+	collectionPath := filepath.Dir(collectionFilePath)
 	btfSubdirectory, btfBasename, err := getBTFDirAndFilename()
 	if err != nil {
 		return nil, err
@@ -102,7 +103,7 @@ func checkEmbeddedCollection(collectionPath string) (*btf.Spec, error) {
 	// tarball, and then unarchive it.
 	btfTarball := filepath.Join(collectionPath, btfSubdirectory, btfTarballFilename)
 	if _, err := os.Stat(btfTarball); errors.Is(err, fs.ErrNotExist) {
-		collectionTarball := filepath.Join(collectionPath, "minimized-btfs.tar.xz")
+		collectionTarball := filepath.Join(collectionFilePath)
 		targetBtfFile := filepath.Join(btfSubdirectory, btfTarballFilename)
 
 		if err := archiver.NewTarXz().Extract(collectionTarball, targetBtfFile, collectionPath); err != nil {

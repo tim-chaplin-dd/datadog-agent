@@ -152,6 +152,11 @@ cookbook_file "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf/minimiz
   action :create
 end
 
+cookbook_file "/tmp/system-probe-tests/pkg/ebpf/bytecode/build/co-re/btf/btfs.tar.xz" do
+  source "btfs.tar.xz"
+  action :create
+end
+
 directory "/go/bin" do
   recursive true
 end

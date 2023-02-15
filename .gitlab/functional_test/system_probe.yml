@@ -59,6 +59,10 @@ pull_test_dockers_arm64:
   - mkdir -p $DD_AGENT_TESTING_DIR/site-cookbooks/dd-system-probe-check/files/dockers
   - mv kitchen-dockers/* $DD_AGENT_TESTING_DIR/site-cookbooks/dd-system-probe-check/files/dockers
 
+.retrieve_btfs:
+  - $S3_CP_CMD $S3_PERMANENT_ARTIFACTS_URI/btfs-${ARCH}.tar.xz /tmp/btfs.tar.xz
+  - cp /tmp/btfs.tar.xz $DD_AGENT_TESTING_DIR/site-cookbooks/dd-system-probe-check/files/btfs.tar.xz
+
 .retrieve_minimized_btfs:
   - $S3_CP_CMD $S3_ARTIFACTS_URI/minimized-btfs-${ARCH}.tar.xz /tmp/minimized-btfs.tar.xz
   - cp /tmp/minimized-btfs.tar.xz $DD_AGENT_TESTING_DIR/site-cookbooks/dd-system-probe-check/files/minimized-btfs.tar.xz
@@ -78,6 +82,7 @@ kitchen_test_system_probe_linux_x64:
   before_script:
     - !reference [.retrieve_test_dockers]
     - !reference [.retrieve_minimized_btfs]
+    - !reference [.retrieve_btfs]
     - pushd $DD_AGENT_TESTING_DIR
     - tasks/kitchen_setup.sh
   parallel:
@@ -102,6 +107,7 @@ kitchen_test_system_probe_linux_x64_ec2:
   before_script:
     - !reference [.retrieve_test_dockers]
     - !reference [.retrieve_minimized_btfs]
+    - !reference [.retrieve_btfs]
     - pushd $DD_AGENT_TESTING_DIR
     - tasks/kitchen_setup.sh
   parallel:
@@ -123,6 +129,7 @@ kitchen_test_system_probe_linux_arm64:
   before_script:
     - !reference [.retrieve_test_dockers]
     - !reference [.retrieve_minimized_btfs]
+    - !reference [.retrieve_btfs]
     - pushd $DD_AGENT_TESTING_DIR
     - tasks/kitchen_setup.sh
   parallel:

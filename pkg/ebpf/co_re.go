@@ -33,7 +33,7 @@ func LoadCOREAsset(cfg *Config, filename string, startFn func(bytecode.AssetRead
 	}()
 
 	var btfData *btf.Spec
-	btfData, telemetry = GetBTF(cfg.BTFPath, cfg.BPFDir)
+	btfData, telemetry = GetBTF(cfg.BTFPath, cfg.BPFDir, cfg.BTFCollectionPath)
 	if btfData == nil {
 		return fmt.Errorf("could not find BTF data on host")
 	}
