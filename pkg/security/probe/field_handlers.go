@@ -159,7 +159,7 @@ func (fh *FieldHandlers) ResolveContainerID(ev *model.Event, e *model.ContainerC
 // ResolveContainerTags resolves the container tags of the event
 func (fh *FieldHandlers) ResolveContainerTags(ev *model.Event, e *model.ContainerContext) []string {
 	if len(e.Tags) == 0 && e.ID != "" {
-		e.Tags = fh.resolvers.TagsResolver.Resolve(e.ID)
+		e.Tags = fh.resolvers.ContainerResolver.Resolve(e.ID)
 	}
 	return e.Tags
 }

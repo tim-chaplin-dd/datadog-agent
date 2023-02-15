@@ -33,7 +33,6 @@ type Resolvers struct {
 	ContainerResolver *resolvers.ContainerResolver
 	TimeResolver      *resolvers.TimeResolver
 	UserGroupResolver *resolvers.UserGroupResolver
-	TagsResolver      *resolvers.TagsResolver
 	DentryResolver    *resolvers.DentryResolver
 	ProcessResolver   *ProcessResolver
 	NamespaceResolver *NamespaceResolver
@@ -84,10 +83,9 @@ func NewResolvers(config *config.Config, probe *Probe) (*Resolvers, error) {
 	resolvers := &Resolvers{
 		manager:           probe.Manager,
 		MountResolver:     mountResolver,
-		ContainerResolver: &resolvers.ContainerResolver{},
+		ContainerResolver: resolvers.NewContainerResolver(config),
 		TimeResolver:      timeResolver,
 		UserGroupResolver: userGroupResolver,
-		TagsResolver:      resolvers.NewTagsResolver(config),
 		DentryResolver:    dentryResolver,
 		NamespaceResolver: namespaceResolver,
 		CgroupsResolver:   cgroupsResolver,
@@ -198,7 +196,7 @@ func (r *Resolvers) Start(ctx context.Context) error {
 	}
 	r.MountResolver.Start(ctx)
 
-	if err := r.TagsResolver.Start(ctx); err != nil {
+	if err := r.ContainerResolver.Start(ctx); err != nil {
 		return err
 	}
 

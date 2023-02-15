@@ -462,14 +462,14 @@ func (m *Module) RuleMatch(rule *rules.Rule, event eval.Event) {
 
 		// check from tagger
 		if service == "" {
-			service = m.probe.GetResolvers().TagsResolver.GetValue(id, "service")
+			service = m.probe.GetResolvers().ContainerResolver.GetValue(id, "service")
 		}
 
 		if service == "" {
 			service = m.config.HostServiceName
 		}
 
-		return append(tags, m.probe.GetResolvers().TagsResolver.Resolve(id)...)
+		return append(tags, m.probe.GetResolvers().ContainerResolver.Resolve(id)...)
 	}
 
 	// send if not selftest related events
