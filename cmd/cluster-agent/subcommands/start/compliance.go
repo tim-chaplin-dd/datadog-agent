@@ -10,6 +10,8 @@ package start
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/DataDog/datadog-agent/pkg/collector/runner"
 	"github.com/DataDog/datadog-agent/pkg/collector/scheduler"
@@ -26,6 +28,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/kubernetes/apiserver"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/startstop"
+	ddgostatsd "github.com/DataDog/datadog-go/v5/statsd"
 )
 
 const (
@@ -92,6 +95,7 @@ func startCompliance(stopper startstop.Stopper, apiCl *apiserver.APIClient, isLe
 	scheduler := scheduler.NewScheduler(runner.GetChan())
 	runner.SetScheduler(scheduler)
 
+	metricsEnabled := coreconfig.Datadog.GetBool("compliance_config.metrics.enabled")
 	checkInterval := coreconfig.Datadog.GetDuration("compliance_config.check_interval")
 	checkMaxEvents := coreconfig.Datadog.GetInt("compliance_config.check_max_events_per_run")
 	configDir := coreconfig.Datadog.GetString("compliance_config.dir")
@@ -100,11 +104,8 @@ func startCompliance(stopper startstop.Stopper, apiCl *apiserver.APIClient, isLe
 	if err != nil {
 		return err
 	}
-	agent, err := agent.New(
-		reporter,
-		scheduler,
-		configDir,
-		endpoints,
+
+	options := []checks.BuilderOption{
 		checks.WithInterval(checkInterval),
 		checks.WithMaxEvents(checkMaxEvents),
 		checks.WithHostname(hname),
@@ -113,6 +114,32 @@ func startCompliance(stopper startstop.Stopper, apiCl *apiserver.APIClient, isLe
 		}),
 		checks.WithKubernetesClient(apiCl.DynamicCl, ""),
 		checks.WithIsLeader(isLeader),
+	}
+
+	if metricsEnabled {
+		// Create a statsd Client
+		statsdAddr := os.Getenv("STATSD_URL")
+		if statsdAddr == "" {
+			// Retrieve statsd host and port from the datadog agent configuration file
+			statsdHost := coreconfig.GetBindHost()
+			statsdPort := coreconfig.Datadog.GetInt("dogstatsd_port")
+			statsdAddr = fmt.Sprintf("%s:%d", statsdHost, statsdPort)
+		}
+
+		statsdClient, err := ddgostatsd.New(statsdAddr)
+		if err != nil {
+			return log.Criticalf("Error creating statsd Client: %s", err)
+		}
+
+		options = append(options, checks.WithStatsd(statsdClient))
+	}
+
+	agent, err := agent.New(
+		reporter,
+		scheduler,
+		configDir,
+		endpoints,
+		options...,
 	)
 	if err != nil {
 		return err
