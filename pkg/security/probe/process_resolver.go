@@ -548,7 +548,7 @@ func (p *ProcessResolver) insertEntry(entry, prev *model.ProcessCacheEntry) {
 	}
 
 	if entry.IsContainerInit() {
-		p.resolvers.CgroupsResolver.AddPID1(entry.ContainerID, entry.Pid)
+		p.resolvers.CgroupsResolver.AddCgroup(entry, entry.Pid)
 	}
 
 	p.addedEntries.Inc()

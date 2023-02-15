@@ -442,8 +442,9 @@ func (mr *MountResolver) resolveMountPath(mountID, pid uint32, containerID strin
 	}
 
 	// force pid1 resolution here to keep the LRU doing his job and not evicting important entries
-	pid1, _ := mr.cgroupsResolver.GetPID1(containerID)
-	if pid1 == 0 {
+	pid1 := uint32(0)
+	cgroup, _ := mr.cgroupsResolver.Get(containerID)
+	if cgroup == nil {
 		// use the pid1 of the host
 		pid1 = 1
 	}
@@ -496,10 +497,13 @@ func (mr *MountResolver) resolveMount(mountID, pid uint32, containerID string) (
 	}
 
 	// force pid1 resolution here to keep the LRU doing his job and not evicting important entries
-	pid1, _ := mr.cgroupsResolver.GetPID1(containerID)
-	if pid1 == 0 {
+	var pid1 uint32
+	entry, _ := mr.cgroupsResolver.Get(containerID)
+	if entry == nil {
 		// use the pid1 of the host
 		pid1 = 1
+	} else {
+		pid1 = entry.pid1
 	}
 
 	if err := mr.syncCache(mountID, pid, pid1); err != nil {

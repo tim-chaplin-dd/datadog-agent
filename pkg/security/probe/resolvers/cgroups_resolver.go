@@ -11,47 +11,64 @@ package resolvers
 import (
 	"sync"
 
+	"github.com/DataDog/datadog-agent/pkg/security/secl/model"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
-type pid1CacheEntry struct {
-	pid      uint32
-	refCount int
+// CgroupCacheEntry describes a cached cgroup
+type CgroupCacheEntry struct {
+	pid1         uint32
+	creationTime uint64
+	refCount     int
+}
+
+// GetPID1 returns the root pid of a cgroup
+func (e *CgroupCacheEntry) GetPID1() uint32 {
+	return e.pid1
+}
+
+// GetCreationTime returns the root pid of a cgroup
+func (e *CgroupCacheEntry) GetCreationTime() uint64 {
+	return e.creationTime
 }
 
 // CgroupsResolver defines a cgroup monitor
 type CgroupsResolver struct {
 	sync.RWMutex
-	pids *simplelru.LRU[string, *pid1CacheEntry]
+	pids *simplelru.LRU[string, *CgroupCacheEntry]
 }
 
-// AddPID1 associates a container id and a pid which is expected to be the pid 1
-func (cr *CgroupsResolver) AddPID1(id string, pid uint32) {
+// AddCgroup associates a container id and a pid which is expected to be the pid 1
+func (cr *CgroupsResolver) AddCgroup(process *model.ProcessCacheEntry, pid uint32) {
 	cr.Lock()
 	defer cr.Unlock()
 
-	entry, exists := cr.pids.Get(id)
+	entry, exists := cr.pids.Get(process.ContainerID)
 	if !exists {
-		cr.pids.Add(id, &pid1CacheEntry{pid: pid, refCount: 1})
+		cr.pids.Add(process.ContainerID, &CgroupCacheEntry{
+			pid1:         pid,
+			refCount:     1,
+			creationTime: uint64(process.ProcessContext.ExecTime.UnixNano()),
+		})
 	} else {
-		if entry.pid > pid {
-			entry.pid = pid
+		if entry.pid1 > pid {
+			entry.pid1 = pid
 		}
 		entry.refCount++
 	}
 }
 
-// GetPID1 return the registered pid1
-func (cr *CgroupsResolver) GetPID1(id string) (uint32, bool) {
+// Get returns the cgroup with specified id
+func (cr *CgroupsResolver) Get(id string) (*CgroupCacheEntry, bool) {
 	cr.RLock()
 	defer cr.RUnlock()
 
 	entry, exists := cr.pids.Get(id)
 	if !exists {
-		return 0, false
+		return nil, false
 	}
 
-	return entry.pid, true
+	return entry, true
 }
 
 // DelByPID force removes the entry
@@ -61,7 +78,7 @@ func (cr *CgroupsResolver) DelByPID(pid uint32) {
 
 	for _, id := range cr.pids.Keys() {
 		entry, exists := cr.pids.Get(id)
-		if exists && entry.pid == pid {
+		if exists && entry.pid1 == pid {
 			cr.pids.Remove(id)
 			break
 		}
@@ -92,7 +109,7 @@ func (cr *CgroupsResolver) Len() int {
 
 // NewCgroupsResolver returns a new cgroups monitor
 func NewCgroupsResolver() (*CgroupsResolver, error) {
-	pids, err := simplelru.NewLRU[string, *pid1CacheEntry](1024, nil)
+	pids, err := simplelru.NewLRU[string, *CgroupCacheEntry](1024, nil)
 	if err != nil {
 		return nil, err
 	}
