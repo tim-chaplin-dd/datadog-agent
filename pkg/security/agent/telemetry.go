@@ -133,7 +133,7 @@ func (t *telemetry) reportProfiledContainers() error {
 	}
 
 	if len(missing) > 0 {
-		log.Infof("not yet profiled workloads (%d/%d): %v; actually profiled: %v", len(missing), len(profiled), missing)
+		log.Infof("not yet profiled workloads (%d/%d): %v; actually profiled: %v", len(missing), len(profiled), missing, debugActually)
 	}
 	t.containers.Sender.Gauge(metrics.MetricActivityDumpNotYetProfiledWorkload, float64(len(missing)), "", nil)
 	return nil
