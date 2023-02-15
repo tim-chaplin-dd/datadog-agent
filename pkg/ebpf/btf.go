@@ -81,41 +81,47 @@ func getBTFDirAndFilename() (dir, file string, err error) {
 	}
 }
 
-func checkEmbeddedCollection(collectionFilePath string) (*btf.Spec, error) {
-	collectionPath := filepath.Dir(collectionFilePath)
+func checkEmbeddedCollection(collectionTarball string) (*btf.Spec, error) {
 	btfSubdirectory, btfBasename, err := getBTFDirAndFilename()
 	if err != nil {
 		return nil, err
 	}
+	return extractFromEmbeddedCollection(collectionTarball, btfSubdirectory, btfBasename)
+}
+
+func extractFromEmbeddedCollection(collectionTarball string, btfSubdirectory string, btfBasename string) (*btf.Spec, error) {
+	collectionPath := filepath.Dir(collectionTarball)
 	btfFilename := btfBasename + ".btf"
 	btfTarballFilename := btfBasename + ".btf.tar.xz"
+	destinationFolder := filepath.Join(collectionPath, btfSubdirectory)
+	extractedBtfPath := filepath.Join(destinationFolder, btfFilename)
 
 	// If we've previously extracted the BTF file in question, we can just load it
-	extractedBtfPath := filepath.Join(collectionPath, btfSubdirectory, btfFilename)
 	if _, err := os.Stat(extractedBtfPath); err == nil {
+		log.Debugf("loading BTF from %s", extractedBtfPath)
 		return loadBTFFrom(extractedBtfPath)
 	}
-	log.Debugf("extracted btf file not found at %s: attempting to extract from embedded archive", extractedBtfPath)
+	log.Debugf("%s not found, obtaining from archive", extractedBtfPath)
 
 	// The embedded BTFs are compressed twice: the individual BTFs themselves are compressed, and the collection
 	// of BTFs as a whole is also compressed.
 	// This means that we'll need to first extract the specific BTF which  we're looking for from the collection
 	// tarball, and then unarchive it.
-	btfTarball := filepath.Join(collectionPath, btfSubdirectory, btfTarballFilename)
+	btfTarball := filepath.Join(destinationFolder, btfTarballFilename)
 	if _, err := os.Stat(btfTarball); errors.Is(err, fs.ErrNotExist) {
-		collectionTarball := filepath.Join(collectionFilePath)
 		targetBtfFile := filepath.Join(btfSubdirectory, btfTarballFilename)
-
+		log.Debugf("%s not found, extracting from archive", btfTarball)
 		if err := archiver.NewTarXz().Extract(collectionTarball, targetBtfFile, collectionPath); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("extract single kernel .btf.tar.xz: %w", err)
 		}
 	}
 
-	destinationFolder := filepath.Join(collectionPath, btfSubdirectory)
+	log.Debugf("unarchiving %s to %s", btfTarball, destinationFolder)
 	if err := archiver.NewTarXz().Unarchive(btfTarball, destinationFolder); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unarchive single kernel .btf: %w", err)
 	}
-	return loadBTFFrom(filepath.Join(destinationFolder, btfFilename))
+	log.Debugf("loading BTF from %s", extractedBtfPath)
+	return loadBTFFrom(extractedBtfPath)
 }
 
 func loadBTFFrom(path string) (*btf.Spec, error) {
