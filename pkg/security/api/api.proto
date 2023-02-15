@@ -21,6 +21,7 @@ message SecurityProcessEventMessage {
 
 message DumpProcessCacheParams {
     bool WithArgs = 1;
+    string Format = 2;
 }
 
 message SecurityDumpProcessCacheMessage {

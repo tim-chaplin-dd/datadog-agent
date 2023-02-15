@@ -180,7 +180,7 @@ func (a *APIServer) DumpDiscarders(ctx context.Context, params *api.DumpDiscarde
 func (a *APIServer) DumpProcessCache(ctx context.Context, params *api.DumpProcessCacheParams) (*api.SecurityDumpProcessCacheMessage, error) {
 	resolvers := a.probe.GetResolvers()
 
-	filename, err := resolvers.ProcessResolver.Dump(params.WithArgs)
+	filename, err := resolvers.ProcessResolver.Dump("json", params.WithArgs)
 	if err != nil {
 		return nil, err
 	}
